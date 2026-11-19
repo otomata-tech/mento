@@ -74,7 +74,7 @@ def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=pr
     cmd = [exe, str(wav), "--model", model, "--device", cfg.get("WHISPER_DEVICE"),
            "--batch_size", cfg.get("WHISPER_BATCH_SIZE"),
            "--compute_type", cfg.get("WHISPER_COMPUTE_TYPE"),
-           "--diarize", "--hf_token", cfg.get("HF_TOKEN"),
+           "--diarize",
            "--output_format", "json", "--output_dir", str(wav.parent)]
     if language:
         cmd += ["--language", language]
@@ -86,7 +86,10 @@ def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=pr
     with open(log_path, "w", encoding="utf-8") as log:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace",
-                                env={**os.environ, "PYTHONWARNINGS": "ignore"})
+                                # The token goes through the environment (huggingface_hub reads
+                                # HF_TOKEN), never argv, which other users can list
+                                env={**os.environ, "PYTHONWARNINGS": "ignore",
+                                     "HF_TOKEN": cfg.get("HF_TOKEN")})
         for line in proc.stdout:
             log.write(line)
             if line.startswith("Transcript:"):

@@ -7,7 +7,6 @@ elsewhere). Environment variables override it.
 
 import os
 import re
-import sys
 from pathlib import Path
 
 import platformdirs
@@ -113,9 +112,13 @@ class Config:
 
     def save(self):
         path = config_file()
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         stored = {k: v for k, v in self.values.items() if v and DEFAULTS.get(k) != v}
-        path.write_text(dump(stored), encoding="utf-8")
-        if sys.platform != "win32":
-            path.chmod(0o600)
+        # Created private (0600) then swapped in: the tokens are never readable by others
+        tmp = path.with_suffix(".tmp")
+        tmp.unlink(missing_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(dump(stored))
+        os.replace(tmp, path)
         return path
