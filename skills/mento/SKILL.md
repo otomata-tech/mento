@@ -62,9 +62,10 @@ mento transcribe <rec> --prompt "Olneia, URSSAF, DSN, Marie Dupont" --speakers 3
 3. Donner un nom parlant : `mento rename <rec> point_client_onboarding`
    (`[a-z0-9_]`, 50 caractères, le préfixe de date est conservé).
 4. Si Alexis veut partager ou garder la réunion en ligne : `mento push <rec>`
-   (`--with-audio` pour le mp3) l'envoie sur mento, puis la synthèse et le lien de
-   partage passent par le MCP ou le connecteur oto de mento. Le push est idempotent :
-   le relancer met à jour.
+   (`--with-audio` pour le mp3) l'envoie sur mento.cc. Le push est idempotent :
+   le relancer met à jour. La synthèse et le lien de partage passent ensuite par le
+   serveur MCP `mento` que déclare ce plugin (connexion OAuth au premier usage) : il
+   sert aussi à retrouver une réunion déjà en ligne quand le dossier local manque.
 
 ## Enregistrer
 
