@@ -64,8 +64,7 @@ mento transcribe <rec> --prompt "Olneia, URSSAF, DSN, Marie Dupont" --speakers 3
 4. Si Alexis veut partager ou garder la réunion en ligne : `mento push <rec>`
    (`--with-audio` pour le mp3) l'envoie sur mento.cc. Le push est idempotent :
    le relancer met à jour. La synthèse et le lien de partage passent ensuite par le
-   serveur MCP `mento` que déclare ce plugin (connexion OAuth au premier usage) : il
-   sert aussi à retrouver une réunion déjà en ligne quand le dossier local manque.
+   connecteur oto de mento, quand il existe.
 
 ## Enregistrer
 

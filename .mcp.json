@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mento": {
-      "type": "http",
-      "url": "https://mento.cc/mcp"
-    }
-  }
-}
