@@ -16,7 +16,7 @@ morceau unique de ce nom, ou `last`. Toutes les commandes de lecture ont `--json
 `mento <commande> --help` donne l'usage détaillé et des exemples.
 
 Si `mento` est introuvable, le CLI n'est pas installé : le dire, avec
-`uv tool install git+https://github.com/AlexisLaporte/mento` puis
+`uv tool install git+https://github.com/otomata-tech/mento` puis
 `mento install` (icône, plugin) et `mento setup` (jetons).
 
 ## Retrouver et lire

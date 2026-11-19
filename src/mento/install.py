@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .tray import HERE, cli_command
 
-MARKETPLACE = "AlexisLaporte/mento"
+MARKETPLACE = "otomata-tech/mento"
 PLUGIN = "mento@mento"
 LAUNCH_AGENT = Path.home() / "Library/LaunchAgents/cc.mento.tray.plist"
 

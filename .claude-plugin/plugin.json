@@ -1,12 +1,12 @@
 {
   "name": "mento",
-  "version": "3.2.0",
-  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename, push to mento. Needs the mento CLI (uv tool install git+https://github.com/AlexisLaporte/mento).",
+  "version": "3.2.1",
+  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename, push to mento. Needs the mento CLI (uv tool install git+https://github.com/otomata-tech/mento).",
   "author": {
     "name": "Alexis Laporte"
   },
-  "homepage": "https://github.com/AlexisLaporte/mento",
-  "repository": "https://github.com/AlexisLaporte/mento",
+  "homepage": "https://github.com/otomata-tech/mento",
+  "repository": "https://github.com/otomata-tech/mento",
   "license": "MIT",
   "keywords": [
     "meeting",

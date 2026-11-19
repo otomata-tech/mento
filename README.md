@@ -15,7 +15,7 @@ mento search "budget" -C 2
 ## Install
 
 ```bash
-uv tool install git+https://github.com/AlexisLaporte/mento
+uv tool install git+https://github.com/otomata-tech/mento
 mento install   # panel icon at login, app menu entry, Claude Code plugin
 mento setup     # speaker name, tokens, transcription engine
 ```
@@ -82,7 +82,7 @@ the project lives. `mento install` enables it in every Claude Code config
 dir; by hand:
 
 ```
-/plugin install mento --marketplace AlexisLaporte/mento
+/plugin install mento --marketplace otomata-tech/mento
 ```
 
 ## Development
