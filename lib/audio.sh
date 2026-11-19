@@ -1,5 +1,11 @@
 #!/bin/bash
 # audio-recorder - Audio recording module
+#
+# A recording is made of segments: pause ends the current ffmpeg process and
+# resume starts a new one, writing audio.part01.mp3, audio.part02.mp3… in the
+# recording folder. stop joins them into audio.mp3 without re-encoding.
+# The session lives in $STATE_DIR: folder, pid (ffmpeg, while recording),
+# segment_start, recorded (seconds of finished segments), paused.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Audio sources
@@ -49,53 +55,70 @@ check_audio_volume() {
     echo "${volume:--91.0}"
 }
 
+# Warns every 2 min while the segment's ffmpeg runs if nothing is captured.
 audio_watchdog() {
     local audio_file="$1"
-    local pid_file="$2"
-    local check_interval=120  # 2 minutes
+    local ffmpeg_pid="$2"
+    local check_interval=120
 
     sleep "$check_interval"
-    while [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; do
+    while kill -0 "$ffmpeg_pid" 2>/dev/null; do
         local vol
         vol=$(check_audio_volume "$audio_file" 5)
         local vol_int=${vol%%.*}
         if [ "$vol_int" -lt -60 ]; then
             notify "⚠️ Audio may be empty" "Monitor volume: ${vol} dB — check your audio source"
-            warn "Audio seems empty (${vol} dB) — check your audio source!"
         fi
         sleep "$check_interval"
     done
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Recording
+# Session state
 # ─────────────────────────────────────────────────────────────────────────────
 
-is_recording() {
-    # shellcheck disable=SC2153  # PID_FILE comes from sourced config.sh
-    [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+state_get() { cat "$STATE_DIR/$1" 2>/dev/null || true; }
+state_set() { mkdir -p "$STATE_DIR" && echo "$2" > "$STATE_DIR/$1"; }
+
+# idle | recording | paused | interrupted (ffmpeg died while recording)
+session_state() {
+    local pid
+    if [ ! -f "$STATE_DIR/folder" ]; then
+        echo idle
+    elif [ -f "$STATE_DIR/paused" ]; then
+        echo paused
+    elif pid=$(state_get pid); [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo recording
+    else
+        echo interrupted
+    fi
 }
 
-cmd_start() {
-    if is_recording; then
-        error "Already recording: $(cat "$NAME_FILE" 2>/dev/null)"
-        return 1
+# Seconds recorded so far, pauses excluded.
+session_elapsed() {
+    local recorded segment_start
+    recorded=$(state_get recorded)
+    recorded=${recorded:-0}
+    segment_start=$(state_get segment_start)
+    if [ -n "$segment_start" ] && [ "$(session_state)" = recording ]; then
+        recorded=$((recorded + $(date +%s) - segment_start))
     fi
+    echo "$recorded"
+}
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Segments
+# ─────────────────────────────────────────────────────────────────────────────
+
+start_segment() {
+    local folder="$1"
     get_sources
+    [ "$OS" != "Darwin" ] && ensure_mic_active
 
-    if [ "$OS" != "Darwin" ]; then
-        ensure_mic_active
-    fi
-
-    local name folder
-    name="recording_$(date +%Y%m%d_%H%M%S)"
-    folder="$RECORDINGS_DIR/$name"
-    mkdir -p "$folder"
-
-    echo "$folder" > "$FOLDER_FILE"
-    echo "$name" > "$NAME_FILE"
-    date +%s > "$START_TIME_FILE"
+    local parts part
+    parts=$(state_get parts)
+    parts=$(( ${parts:-0} + 1 ))
+    part="$folder/$(printf 'audio.part%02d.mp3' "$parts")"
 
     # Mic and system audio stay on separate channels (L/R) instead of being
     # mixed, so transcription can tell the local speaker from the remote ones.
@@ -107,24 +130,111 @@ cmd_start() {
     case "$OS" in
         Darwin)
             if [ -n "$MONITOR" ]; then
-                ffmpeg -f avfoundation -i ":$MONITOR" -f avfoundation -i ":$MIC" \
-                    "${dual_track_args[@]}" -codec:a libmp3lame -q:a 2 \
-                    "$folder/audio.mp3" &>/dev/null &
+                ffmpeg -nostdin -f avfoundation -i ":$MONITOR" -f avfoundation -i ":$MIC" \
+                    "${dual_track_args[@]}" -codec:a libmp3lame -q:a 2 "$part" &>/dev/null &
             else
-                ffmpeg -f avfoundation -i ":$MIC" -codec:a libmp3lame -q:a 2 \
-                    "$folder/audio.mp3" &>/dev/null &
+                ffmpeg -nostdin -f avfoundation -i ":$MIC" -codec:a libmp3lame -q:a 2 \
+                    "$part" &>/dev/null &
             fi
             ;;
         *)
-            ffmpeg -f pulse -i "$MONITOR" -f pulse -i "$MIC" \
-                "${dual_track_args[@]}" -codec:a libmp3lame -q:a 2 \
-                "$folder/audio.mp3" &>/dev/null &
+            ffmpeg -nostdin -f pulse -i "$MONITOR" -f pulse -i "$MIC" \
+                "${dual_track_args[@]}" -codec:a libmp3lame -q:a 2 "$part" &>/dev/null &
             ;;
     esac
+    local pid=$!
 
-    echo $! > "$PID_FILE"
+    state_set pid "$pid"
+    state_set parts "$parts"
+    state_set segment_start "$(date +%s)"
 
-    # Detect audio mode
+    if [ "$OS" != "Darwin" ]; then
+        audio_watchdog "$part" "$pid" &
+        state_set watchdog_pid "$!"
+        disown
+    fi
+}
+
+# Ends the running segment and waits for ffmpeg to finalize its file.
+end_segment() {
+    local watchdog pid segment_start recorded
+    watchdog=$(state_get watchdog_pid)
+    if [ -n "$watchdog" ]; then
+        kill "$watchdog" 2>/dev/null
+    fi
+    rm -f "$STATE_DIR/watchdog_pid"
+
+    pid=$(state_get pid)
+    if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
+        local i
+        for ((i = 0; i < 100; i++)); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            warn "ffmpeg did not exit after 10 s — killing it"
+            kill -9 "$pid" 2>/dev/null
+        fi
+    fi
+
+    segment_start=$(state_get segment_start)
+    recorded=$(state_get recorded)
+    if [ -n "$segment_start" ]; then
+        state_set recorded $(( ${recorded:-0} + $(date +%s) - segment_start ))
+    fi
+    rm -f "$STATE_DIR/pid" "$STATE_DIR/segment_start"
+}
+
+# Joins audio.partNN.mp3 into audio.mp3 (stream copy, dual-track tag kept).
+join_parts() {
+    local folder="$1"
+    local parts=("$folder"/audio.part*.mp3)
+    if [ ! -e "${parts[0]}" ]; then
+        error "No audio recorded in $folder"
+        return 1
+    fi
+    if [ ${#parts[@]} -eq 1 ]; then
+        mv "${parts[0]}" "$folder/audio.mp3"
+        return
+    fi
+
+    local list="$folder/parts.txt" comment p
+    comment=$(ffprobe -v error -show_entries format_tags=comment -of default=nw=1:nk=1 "${parts[0]}")
+    for p in "${parts[@]}"; do
+        echo "file '$(basename "$p")'"
+    done > "$list"
+    if ! ffmpeg -v error -nostdin -f concat -safe 0 -i "$list" -c copy \
+        -metadata comment="$comment" "$folder/audio.mp3"; then
+        rm -f "$folder/audio.mp3"
+        error "Failed to join the recording parts (kept in $folder)"
+        return 1
+    fi
+    rm -f "${parts[@]}" "$list"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+cmd_start() {
+    local current
+    current=$(session_state)
+    if [ "$current" != idle ]; then
+        error "A recording is already $current: $(basename "$(state_get folder)") — stop it first"
+        return 1
+    fi
+
+    local name folder
+    name="recording_$(date +%Y%m%d_%H%M%S)"
+    folder="$RECORDINGS_DIR/$name"
+    mkdir -p "$folder"
+    recordings meta-set "$folder" "started_at=$(date -Iseconds)"
+
+    rm -rf "$STATE_DIR"
+    state_set folder "$folder"
+    state_set recorded 0
+    start_segment "$folder"
+
     local audio_mode sink_name mic_name
     case "$OS" in
         Darwin) sink_name="AVFoundation :$MONITOR"; mic_name="AVFoundation :$MIC"; audio_mode="macOS" ;;
@@ -147,132 +257,91 @@ cmd_start() {
     echo ""
 
     notify "Recording started" "$name"
+}
 
-    # Background watchdog (Linux only)
-    if [ "$OS" != "Darwin" ]; then
-        audio_watchdog "$folder/audio.mp3" "$PID_FILE" &
-        echo $! > "/tmp/audio-recorder-watchdog.pid"
-        disown
+cmd_pause() {
+    if [ "$(session_state)" != recording ]; then
+        error "Not recording ($(session_state))"
+        return 1
     fi
+    end_segment
+    touch "$STATE_DIR/paused"
+    local elapsed
+    elapsed=$(format_duration "$(session_elapsed)")
+    echo -e "  ${YELLOW}❚❚${NC} ${BOLD}Paused${NC} ${DIM}($elapsed recorded)${NC}"
+    notify "Recording paused" "$elapsed recorded"
+}
+
+cmd_resume() {
+    if [ "$(session_state)" != paused ]; then
+        error "Not paused ($(session_state))"
+        return 1
+    fi
+    rm -f "$STATE_DIR/paused"
+    start_segment "$(state_get folder)"
+    echo -e "  ${RED}●${NC} ${BOLD}Recording${NC} ${DIM}(resumed)${NC}"
+    notify "Recording resumed" "$(basename "$(state_get folder)")"
 }
 
 cmd_stop() {
-    local process_audio=true
-    local comment=""
-    local ask_transcribe=true
-    local num_speakers=""
     local do_trim=false
-
-    # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --only) process_audio=false; shift ;;
-            --yes|--transcribe) ask_transcribe=false; shift ;;
             --trim) do_trim=true; shift ;;
-            --speakers)
-                num_speakers="$2"
-                shift 2
-                ;;
-            --comment) comment="$2"; shift 2 ;;
-            *) shift ;;
+            *) error "Unknown option: $1"; return 1 ;;
         esac
     done
 
-    if [[ -n "$num_speakers" && ! "$num_speakers" =~ ^[0-9]+$ ]]; then
-        error "Invalid speaker count: $num_speakers"
-        return 1
-    fi
+    local current folder
+    current=$(session_state)
+    case "$current" in
+        idle) error "No recording in progress"; return 1 ;;
+        recording) end_segment ;;
+        interrupted) warn "ffmpeg had stopped on its own — keeping what was recorded" ;;
+    esac
+    folder=$(state_get folder)
 
-    if ! is_recording; then
-        error "No recording in progress"
-        return 1
-    fi
+    join_parts "$folder" || return 1
+    rm -rf "$STATE_DIR"
 
-    # Stop watchdog
-    [ -f "/tmp/audio-recorder-watchdog.pid" ] && kill "$(cat "/tmp/audio-recorder-watchdog.pid")" 2>/dev/null
-    rm -f "/tmp/audio-recorder-watchdog.pid"
-
-    # Stop ffmpeg
-    kill "$(cat "$PID_FILE")" 2>/dev/null
-    rm -f "$PID_FILE"
-
-    local name folder start_time
-    name=$(cat "$NAME_FILE" 2>/dev/null)
-    folder=$(cat "$FOLDER_FILE" 2>/dev/null)
-    start_time=$(cat "$START_TIME_FILE" 2>/dev/null)
-    local duration=""
-
-    if [ -n "$start_time" ]; then
-        local elapsed=$(($(date +%s) - start_time))
-        duration=$(format_duration $elapsed)
-    fi
+    local seconds
+    seconds=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$folder/audio.mp3")
+    seconds=${seconds%%.*}
+    recordings meta-set "$folder" "duration_s:=$seconds"
 
     echo ""
-    echo -e "  ${GREEN}■${NC} ${BOLD}Stopped${NC} ${DIM}($duration)${NC}"
+    echo -e "  ${GREEN}■${NC} ${BOLD}Stopped${NC} ${DIM}($(format_duration "$seconds"))${NC}"
     echo -e "  ${DIM}$folder/audio.mp3${NC}"
+    notify "Recording stopped" "$(basename "$folder") ($(format_duration "$seconds"))"
 
-    notify "Recording stopped" "$name ($duration)"
-
-    # Process if requested
-    if [ "$process_audio" = true ]; then
-        if [ "$ask_transcribe" = true ]; then
-            if [ ! -t 0 ]; then
-                error "Stop is interactive by default. Use --yes to process or --only to skip processing."
-                return 1
-            fi
-
-            local do_transcribe
-            echo ""
-            read -rp "Transcrire maintenant ? [Y/n] " do_transcribe
-            if [[ "$do_transcribe" =~ ^[Nn] ]]; then
-                return 0
-            fi
-
-            if [ -z "$num_speakers" ]; then
-                read -rp "Combien de speakers ? [auto] " num_speakers
-                # Validate: must be a positive integer, otherwise auto
-                if [[ -n "$num_speakers" && ! "$num_speakers" =~ ^[0-9]+$ ]]; then
-                    warn "Invalid input '$num_speakers' — using auto-detect"
-                    num_speakers=""
-                fi
-            fi
-        fi
-
-        # Trim if requested
-        if [ "$do_trim" = true ]; then
-            if [ "$ask_transcribe" = false ]; then
-                cmd_trim --yes "$folder"
-            else
-                cmd_trim "$folder"
-            fi
-        fi
-
-        echo ""
-        echo -e "${BOLD}Processing...${NC}"
-        echo ""
-
-        if cmd_transcribe "$folder" "" "$num_speakers"; then
-            if [ -n "$comment" ]; then
-                cmd_summarize "$folder" --comment "$comment"
-            else
-                cmd_summarize "$folder"
-            fi
-        fi
+    if [ "$do_trim" = true ]; then
+        cmd_trim --yes "$folder"
     fi
 }
 
 cmd_status() {
-    local name start_time
-    if is_recording; then
-        name=$(cat "$NAME_FILE" 2>/dev/null)
-        start_time=$(cat "$START_TIME_FILE" 2>/dev/null)
-        local duration=""
-        if [ -n "$start_time" ]; then
-            local elapsed=$(($(date +%s) - start_time))
-            duration=" ($(format_duration $elapsed))"
+    local json=false
+    [ "$1" = "--json" ] && json=true
+
+    local current folder elapsed
+    current=$(session_state)
+    folder=$(state_get folder)
+    elapsed=$(session_elapsed)
+
+    if [ "$json" = true ]; then
+        if [ "$current" = idle ]; then
+            echo '{"state": "idle"}'
+        else
+            printf '{"state": "%s", "id": "%s", "path": "%s", "elapsed_s": %d}\n' \
+                "$current" "$(basename "$folder")" "$folder" "$elapsed"
         fi
-        echo -e "${RED}●${NC} Recording: ${BOLD}$name${NC}$duration"
-    else
-        echo -e "${DIM}■${NC} Not recording"
+        return
     fi
+
+    case "$current" in
+        idle)        echo -e "${DIM}■${NC} Not recording" ;;
+        recording)   echo -e "${RED}●${NC} Recording: ${BOLD}$(basename "$folder")${NC} ($(format_duration "$elapsed"))" ;;
+        paused)      echo -e "${YELLOW}❚❚${NC} Paused: ${BOLD}$(basename "$folder")${NC} ($(format_duration "$elapsed") recorded)" ;;
+        interrupted) echo -e "${RED}✗${NC} Interrupted: ${BOLD}$(basename "$folder")${NC} — ffmpeg stopped, run 'audio-recorder stop'" ;;
+    esac
 }

@@ -114,10 +114,7 @@ cmd_trim() {
         esac
     done
 
-    if [ -z "$folder" ]; then
-        folder=$(latest_recording_dir)
-    fi
-    [[ ! "$folder" == /* ]] && folder="$RECORDINGS_DIR/$folder"
+    folder=$(resolve_recording "$folder") || return 1
 
     local audio="$folder/audio.mp3"
     if [ ! -f "$audio" ]; then
@@ -167,5 +164,6 @@ cmd_trim() {
     local new_dur
     new_dur=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$audio")
     new_dur=${new_dur%%.*}
+    recordings meta-set "$folder" "duration_s:=$new_dur"
     success "Trimmed: $(format_duration "$total_dur") → $(format_duration "$new_dur") (original: audio_full.mp3)"
 }

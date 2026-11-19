@@ -1,6 +1,5 @@
 #!/bin/bash
 # audio-recorder - Push module
-# shellcheck disable=SC2012  # ls used intentionally for sorting by time
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Push to tuls.me
@@ -24,11 +23,7 @@ cmd_push() {
         esac
     done
 
-    # Default to latest valid recording
-    if [ -z "$folder" ]; then
-        folder=$(latest_recording_dir)
-    fi
-    [[ ! "$folder" == /* ]] && folder="$RECORDINGS_DIR/$folder"
+    folder=$(resolve_recording "$folder") || return 1
 
     local transcript="$folder/transcript.txt"
     if [ ! -f "$transcript" ]; then
@@ -47,9 +42,6 @@ cmd_push() {
         -F "transcript=<$transcript"
         -F "original_filename=$name"
     )
-
-    # Optional summary
-    [ -f "$folder/summary.md" ] && curl_args+=(-F "summary=<$folder/summary.md")
 
     # Optional duration via ffprobe
     if [ -f "$folder/audio.mp3" ]; then

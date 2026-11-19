@@ -1,0 +1,14 @@
+{
+  "name": "audio-recorder",
+  "description": "Record and transcribe meetings, then let Claude find, read and search them.",
+  "owner": {
+    "name": "Alexis Laporte"
+  },
+  "plugins": [
+    {
+      "name": "audio-recorder",
+      "source": "./",
+      "description": "Meeting recordings: find, read, search and transcribe them with the meeting's context."
+    }
+  ]
+}

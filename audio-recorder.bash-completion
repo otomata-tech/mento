@@ -4,12 +4,11 @@
 _audio_recorder() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local cmd="${COMP_WORDS[1]}"
-    local commands="start stop status transcribe summarize push list open setup help"
-    local folders
+    local commands="start pause resume stop status tray transcribe trim list show cat search path rename open push setup help"
+    local opts=""
 
     # shellcheck source=/dev/null
     [ -f "$HOME/.config/audio-recorder/config" ] && source "$HOME/.config/audio-recorder/config"
-
     local recordings_dir="${RECORDINGS_DIR:-$HOME/Recordings}"
 
     if [ "$COMP_CWORD" -eq 1 ]; then
@@ -18,30 +17,27 @@ _audio_recorder() {
     fi
 
     case "$cmd" in
-        stop)
-            mapfile -t COMPREPLY < <(compgen -W "--only --comment --yes --transcribe --speakers" -- "$cur")
-            ;;
-        push)
-            if [[ "$cur" == -* ]]; then
-                mapfile -t COMPREPLY < <(compgen -W "--with-audio" -- "$cur")
-            elif [ -d "$recordings_dir" ]; then
-                folders="$(ls -1 "$recordings_dir" 2>/dev/null)"
-                mapfile -t COMPREPLY < <(compgen -W "$folders" -- "$cur")
-            fi
-            ;;
-        summarize)
-            if [[ "$cur" == -* ]]; then
-                mapfile -t COMPREPLY < <(compgen -W "--comment" -- "$cur")
-            elif [ -d "$recordings_dir" ]; then
-                folders="$(ls -1 "$recordings_dir" 2>/dev/null)"
-                mapfile -t COMPREPLY < <(compgen -W "$folders" -- "$cur")
-            fi
-            ;;
-        transcribe|open)
-            if [ -d "$recordings_dir" ]; then
-                folders="$(ls -1 "$recordings_dir" 2>/dev/null)"
-                mapfile -t COMPREPLY < <(compgen -W "$folders" -- "$cur")
-            fi
+        stop)       opts="--trim" ;;
+        status)     opts="--json" ;;
+        transcribe) opts="--prompt --speakers --language --model" ;;
+        trim)       opts="--yes" ;;
+        list|ls)    opts="--since --limit --json" ;;
+        show)       opts="--json" ;;
+        cat)        opts="--speaker --from --to --json" ;;
+        search)     opts="--since --speaker -C --json" ;;
+        push)       opts="--with-audio" ;;
+    esac
+
+    if [[ "$cur" == -* ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "$opts" -- "$cur")
+        return
+    fi
+
+    case "$cmd" in
+        transcribe|trim|show|cat|path|rename|open|push)
+            local folders
+            folders="last $(ls -1 "$recordings_dir" 2>/dev/null)"
+            mapfile -t COMPREPLY < <(compgen -W "$folders" -- "$cur")
             ;;
         *)
             COMPREPLY=()

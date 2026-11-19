@@ -5,9 +5,9 @@
 #   ./install.sh            Install (copy payload to a stable location, then link a launcher).
 #                           Survives moving/deleting this checkout. Default — use for end users.
 #   ./install.sh --link     Dev install: symlink the launcher to THIS checkout (edits go live).
-#   ./install.sh --uninstall  Remove launcher, completion, skill and the installed payload.
+#   ./install.sh --uninstall  Remove launcher, completion, skill, tray autostart and the payload.
 #                             Keeps your config (~/.config/audio-recorder) and recordings.
-#   -y, --yes               Assume "yes" to prompts (deps, Claude skill). For non-interactive installs.
+#   -y, --yes               Assume "yes" to prompts (deps). For non-interactive installs.
 
 set -e
 
@@ -15,8 +15,8 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 LIBEXEC_DIR="$HOME/.local/share/audio-recorder"
 COMPLETION_DIR="$HOME/.local/share/bash-completion/completions"
-SKILL_DIR="$HOME/.claude/skills"
-SKILL_FILE="$SKILL_DIR/audio-recorder.md"
+AUTOSTART_FILE="$HOME/.config/autostart/audio-recorder-tray.desktop"
+APP_FILE="$HOME/.local/share/applications/audio-recorder.desktop"
 RECORDINGS_DIR="$HOME/Recordings"
 
 OS="$(uname -s)"
@@ -26,7 +26,16 @@ DO_UNINSTALL=0
 ASSUME_YES=0
 
 # Payload that makes up a working install (relative to REPO_DIR).
-PAYLOAD=(audio-recorder lib audio-recorder.bash-completion claude-skill.md summarize-prompt.default.md)
+PAYLOAD=(audio-recorder lib icons audio-recorder.bash-completion .claude-plugin skills)
+
+# Each Claude Code account has its own config dir (~/.claude, ~/.claude-<account>),
+# where the plugin is enabled.
+claude_dirs() {
+    local d
+    for d in "$HOME"/.claude "$HOME"/.claude-*; do
+        [ -f "$d/settings.json" ] && echo "$d"
+    done
+}
 
 usage() {
     sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
@@ -64,10 +73,16 @@ confirm() {
 if [ "$DO_UNINSTALL" = 1 ]; then
     echo "=== audio-recorder uninstall ==="
     rm -f "$BIN_DIR/audio-recorder"
-    rm -f "$COMPLETION_DIR/audio-recorder"
-    [ -L "$SKILL_FILE" ] && rm -f "$SKILL_FILE"
+    rm -f "$COMPLETION_DIR/audio-recorder" "$AUTOSTART_FILE" "$APP_FILE"
+    pkill -f "lib/tray.py" 2>/dev/null || true
+    if command -v claude &>/dev/null; then
+        for d in $(claude_dirs); do
+            CLAUDE_CONFIG_DIR="$d" claude plugin uninstall audio-recorder@audio-recorder &>/dev/null || true
+        done
+        claude plugin marketplace remove audio-recorder &>/dev/null || true
+    fi
     rm -rf "$LIBEXEC_DIR"
-    echo "[OK] Removed launcher, completion, skill and $LIBEXEC_DIR"
+    echo "[OK] Removed launcher, completion, tray autostart, Claude plugin and $LIBEXEC_DIR"
     echo "[KEPT] Config (~/.config/audio-recorder) and recordings ($RECORDINGS_DIR)"
     exit 0
 fi
@@ -102,13 +117,6 @@ echo "[OK] Launcher: $BIN_DIR/audio-recorder -> $SRC/audio-recorder"
 
 ln -sf "$SRC/audio-recorder.bash-completion" "$COMPLETION_DIR/audio-recorder"
 echo "[OK] Bash completion installed"
-
-# Default prompt template (data, never overwritten if customized)
-mkdir -p "$RECORDINGS_DIR"
-if [ ! -f "$RECORDINGS_DIR/summarize-prompt.md" ] && [ -f "$SRC/summarize-prompt.default.md" ]; then
-    cp "$SRC/summarize-prompt.default.md" "$RECORDINGS_DIR/summarize-prompt.md"
-    echo "[OK] Prompt template copied to $RECORDINGS_DIR/"
-fi
 
 # PATH check
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
@@ -154,7 +162,6 @@ install_deps() {
 MISSING=0
 if command -v ffmpeg &>/dev/null; then echo "[OK] ffmpeg"; else echo "[MISSING] ffmpeg"; MISSING=1; fi
 if command -v whisperx &>/dev/null; then echo "[OK] whisperx"; else echo "[MISSING] whisperx"; MISSING=1; fi
-if command -v claude &>/dev/null; then echo "[OK] claude (for summarize)"; else echo "[OPTIONAL] claude CLI not found (needed for summarize command)"; fi
 
 [ $MISSING -eq 1 ] && install_deps
 
@@ -167,21 +174,80 @@ if [ "$OS" = "Darwin" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Claude Code skill
+# Claude Code plugin
 # ─────────────────────────────────────────────────────────────────────────────
 
-echo ""
-echo "=== Claude Code skill ==="
-if [ -d "$HOME/.claude" ]; then
-    if [ -L "$SKILL_FILE" ] || [ -f "$SKILL_FILE" ]; then
-        echo "[OK] Claude skill already installed"
-    elif confirm "Install Claude Code skill? (lets Claude use audio-recorder)"; then
-        mkdir -p "$SKILL_DIR"
-        ln -sf "$SRC/claude-skill.md" "$SKILL_FILE"
-        echo "[OK] Claude skill installed to $SKILL_FILE"
+# The install itself is the marketplace (a directory source, read in place);
+# the plugin is cached by version, so bump .claude-plugin/plugin.json to ship
+# a skill change.
+install_plugin() {
+    local d="$1"
+    export CLAUDE_CONFIG_DIR="$d"
+    # Former installs linked the skill by hand
+    rm -f "$d/skills/audio-recorder.md" "$d/skills/audio-recorder/SKILL.md"
+    rmdir "$d/skills/audio-recorder" 2>/dev/null || true
+
+    if claude plugin marketplace list --json | grep -q '"name": "audio-recorder"'; then
+        claude plugin marketplace update audio-recorder >/dev/null
+    else
+        claude plugin marketplace add "$SRC" >/dev/null
     fi
+    if claude plugin list --json | grep -q '"id": "audio-recorder@audio-recorder"'; then
+        claude plugin update audio-recorder@audio-recorder >/dev/null
+    else
+        claude plugin install audio-recorder@audio-recorder --scope user >/dev/null
+    fi
+}
+
+echo ""
+echo "=== Claude Code plugin ==="
+if ! command -v claude &>/dev/null; then
+    echo "[SKIP] claude not found"
 else
-    echo "[SKIP] ~/.claude not found (Claude Code not installed)"
+    for d in $(claude_dirs); do
+        if (install_plugin "$d"); then
+            echo "[OK] Plugin audio-recorder enabled in $d"
+        else
+            echo "[FAIL] Plugin not installed in $d"
+        fi
+    done
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Panel icon (Linux)
+# ─────────────────────────────────────────────────────────────────────────────
+
+if [ "$OS" != "Darwin" ]; then
+    echo ""
+    echo "=== Panel icon ==="
+    if python3 -c "import gi; gi.require_version('AyatanaAppIndicator3', '0.1')" 2>/dev/null; then
+        mkdir -p "$(dirname "$AUTOSTART_FILE")" "$(dirname "$APP_FILE")"
+        cat > "$APP_FILE" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Audio Recorder
+Comment=Record meetings: panel icon to start, pause and stop
+Exec=$BIN_DIR/audio-recorder tray
+Icon=$SRC/icons/audio-recorder.svg
+Categories=AudioVideo;Audio;
+Keywords=record;meeting;transcript;
+DESKTOP
+        echo "[OK] App menu entry ($APP_FILE)"
+        cat > "$AUTOSTART_FILE" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=audio-recorder
+Comment=Start, pause and stop meeting recordings
+Exec=$BIN_DIR/audio-recorder tray
+Icon=$SRC/icons/audio-recorder.svg
+X-GNOME-Autostart-enabled=true
+DESKTOP
+        echo "[OK] Starts with the session ($AUTOSTART_FILE)"
+        echo "     Now: audio-recorder tray &"
+    else
+        echo "[SKIP] AppIndicator missing: sudo apt install gir1.2-ayatanaappindicator3-0.1"
+        echo "       GNOME also needs the AppIndicator extension (built in on Ubuntu)."
+    fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -192,8 +258,7 @@ echo ""
 echo "=== Setup ==="
 echo "Run 'audio-recorder setup' to configure your HuggingFace token."
 echo ""
-echo "WhisperX requires accepting conditions at:"
-echo "  - https://hf.co/pyannote/speaker-diarization-3.1"
-echo "  - https://hf.co/pyannote/segmentation-3.0"
+echo "WhisperX requires accepting the conditions of:"
+echo "  - https://hf.co/pyannote/speaker-diarization-community-1"
 echo ""
 echo "Done!"

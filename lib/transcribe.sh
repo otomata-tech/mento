@@ -1,6 +1,5 @@
 #!/bin/bash
 # audio-recorder - Transcription module
-# shellcheck disable=SC2012  # ls used intentionally for sorting by time
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Transcribe
@@ -19,28 +18,47 @@ cmd_transcribe() {
         return 1
     fi
 
-    local input="$1"
-    local model="${2:-${WHISPER_MODEL:-large-v3}}"
-    local num_speakers="$3"
-    local audio=""
-    local output_dir=""
-    local basename_noext=""
+    local input="" model="${WHISPER_MODEL:-large-v3}" speakers="" language="$WHISPER_LANGUAGE" prompt=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --prompt)   prompt="$2"; shift 2 ;;
+            --speakers) speakers="$2"; shift 2 ;;
+            --language) language="$2"; shift 2 ;;
+            --model)    model="$2"; shift 2 ;;
+            -*)         error "Unknown option: $1"; return 1 ;;
+            *)          input="$1"; shift ;;
+        esac
+    done
 
-    # Default to latest recording
-    if [ -z "$input" ]; then
-        input=$(latest_recording_dir)
+    # Participants: N, or MIN-MAX when it is not sure who joined
+    local speaker_args=()
+    if [[ "$speakers" =~ ^[0-9]+$ ]]; then
+        speaker_args=(--min_speakers "$speakers" --max_speakers "$speakers")
+    elif [[ "$speakers" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+        speaker_args=(--min_speakers "${BASH_REMATCH[1]}" --max_speakers "${BASH_REMATCH[2]}")
+    elif [ -n "$speakers" ]; then
+        error "Invalid speaker count: $speakers (expected N or MIN-MAX)"
+        return 1
     fi
 
-    # Check if input is a file or folder
+    # Domain vocabulary (names, products, acronyms) primes every window and
+    # stops Whisper from mishearing them ("Cloud" for "Claude"). The global
+    # vocabulary comes first: Whisper keeps the end of an over-long prompt.
+    local vocabulary="$WHISPER_INITIAL_PROMPT${prompt:+, $prompt}"
+    vocabulary="${vocabulary#, }"
+    if [ ${#vocabulary} -gt 600 ]; then
+        warn "Vocabulary is ${#vocabulary} chars — Whisper keeps only ~220 tokens, the start will be dropped"
+    fi
+
+    local audio="" output_dir="" basename_noext="" folder=""
+
+    # A file path, or a recording (id, prefix, part of it, default: last)
     if [ -f "$input" ]; then
-        # Direct file path
         audio="$input"
         output_dir="$(dirname "$audio")"
         basename_noext="$(basename "$audio" | sed 's/\.[^.]*$//')"
     else
-        # Folder path (existing behavior)
-        local folder="$input"
-        [[ ! "$folder" == /* ]] && folder="$RECORDINGS_DIR/$folder"
+        folder=$(resolve_recording "$input") || return 1
         audio="$folder/audio.mp3"
         output_dir="$folder"
         basename_noext="audio"
@@ -93,11 +111,6 @@ cmd_transcribe() {
     : > "$progress_file"  # Clear/create progress file
     : > "$whisper_log"
 
-    local speaker_args=()
-    if [[ -n "$num_speakers" && "$num_speakers" =~ ^[0-9]+$ ]]; then
-        speaker_args=(--min_speakers "$num_speakers" --max_speakers "$num_speakers")
-    fi
-
     # VRAM-safety knobs (override via env). Defaults tuned to avoid OOM on long
     # recordings: smaller batch + int8 compute keep peak VRAM well under budget.
     # WHISPER_DEVICE=cpu lets transcription run without a working GPU (slower).
@@ -105,19 +118,12 @@ cmd_transcribe() {
     local compute_type="${WHISPER_COMPUTE_TYPE:-int8}"
     local device="${WHISPER_DEVICE:-cuda}"
 
-    # Force language (skip auto-detect). Useful when a chunk starts on silence
-    # and language detection misfires. Empty = auto-detect (default).
+    # Forced language skips auto-detect, which misfires when a chunk starts
+    # on silence. Empty = auto-detect.
     local lang_args=()
-    if [[ -n "$WHISPER_LANGUAGE" ]]; then
-        lang_args=(--language "$WHISPER_LANGUAGE")
-    fi
-
-    # Domain vocabulary (names, products, acronyms) primes the first window and
-    # stops Whisper from mishearing them ("Cloud" for "Claude").
+    [ -n "$language" ] && lang_args=(--language "$language")
     local prompt_args=()
-    if [[ -n "$WHISPER_INITIAL_PROMPT" ]]; then
-        prompt_args=(--initial_prompt "$WHISPER_INITIAL_PROMPT")
-    fi
+    [ -n "$vocabulary" ] && prompt_args=(--initial_prompt "$vocabulary")
 
     if ! PYTHONWARNINGS=ignore whisperx "$whisper_input" \
         --model "$model" \
@@ -180,6 +186,16 @@ cmd_transcribe() {
 
     # Cleanup other formats
     rm -f "$output_dir/$basename_noext".{srt,tsv,vtt} 2>/dev/null
+
+    if [ -n "$folder" ]; then
+        recordings meta-set "$folder" \
+            "transcription.transcribed_at=$(date -Iseconds)" \
+            "transcription.model=$model" \
+            "transcription.language=$language" \
+            "transcription.speakers=$speakers" \
+            "transcription.prompt=$vocabulary" \
+            "transcription.dual_track:=$dual_track"
+    fi
 
     success "Transcript: $transcript"
 }

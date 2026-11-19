@@ -12,10 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 OS="$(uname -s)"
 RECORDINGS_DIR="$HOME/Recordings"
-PID_FILE="/tmp/audio-recorder.pid"
-START_TIME_FILE="/tmp/audio-recorder-start"
-FOLDER_FILE="/tmp/audio-recorder-folder"
-NAME_FILE="/tmp/audio-recorder-name"
+# Recording session state (lib/audio.sh): folder, ffmpeg pid, paused flag…
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/audio-recorder"
 
 # Recordings tagged with this keep the mic on the left channel and the system
 # audio on the right (lib/audio.sh), which lib/transcript.py uses to pin the
@@ -27,9 +25,6 @@ load_config() {
     # shellcheck source=/dev/null
     [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
     mkdir -p "$RECORDINGS_DIR"
-
-    # Default context base dir for CRM/projects
-    CONTEXT_BASE_DIR="${CONTEXT_BASE_DIR:-$HOME}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -67,7 +62,7 @@ setup() {
     # Transcription language and vocabulary
     read -rp "Transcription language, empty = auto (fr/en/...) [$WHISPER_LANGUAGE]: " new_lang
     [ -n "$new_lang" ] && WHISPER_LANGUAGE="$new_lang"
-    read -rp "Vocabulary hint (names, products, acronyms) [$WHISPER_INITIAL_PROMPT]: " new_prompt
+    read -rp "Vocabulary always primed (names, products, acronyms) [$WHISPER_INITIAL_PROMPT]: " new_prompt
     [ -n "$new_prompt" ] && WHISPER_INITIAL_PROMPT="$new_prompt"
 
     # Tuls API token

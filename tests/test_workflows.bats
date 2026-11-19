@@ -4,90 +4,100 @@ setup() {
     REPO_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
     source "$REPO_DIR/lib/utils.sh"
     source "$REPO_DIR/lib/audio.sh"
+    source "$REPO_DIR/lib/library.sh"
 
     TEST_TMPDIR="$(mktemp -d)"
     RECORDINGS_DIR="$TEST_TMPDIR/recordings"
+    STATE_DIR="$TEST_TMPDIR/state"
+    DUAL_TRACK_TAG="audio-recorder:L=mic,R=system"
+    OS=Linux
     mkdir -p "$RECORDINGS_DIR"
 
-    PID_FILE="$TEST_TMPDIR/audio-recorder.pid"
-    FOLDER_FILE="$TEST_TMPDIR/audio-recorder-folder"
-    NAME_FILE="$TEST_TMPDIR/audio-recorder-name"
-    START_TIME_FILE="$TEST_TMPDIR/audio-recorder-start"
-
-    export RECORDINGS_DIR PID_FILE FOLDER_FILE NAME_FILE START_TIME_FILE
+    notify() { :; }
+    # A fake segment: 1 s of tone in place of the ffmpeg capture
+    start_segment() {
+        local folder="$1" parts part
+        parts=$(state_get parts)
+        parts=$(( ${parts:-0} + 1 ))
+        part="$folder/$(printf 'audio.part%02d.mp3' "$parts")"
+        ffmpeg -v error -f lavfi -i "sine=f=$((200 * parts)):d=1" -ac 2 \
+            -metadata comment="$DUAL_TRACK_TAG" -y "$part"
+        sleep 60 &
+        state_set pid "$!"
+        state_set parts "$parts"
+        state_set segment_start "$(date +%s)"
+    }
 }
 
 teardown() {
-    if [ -n "${TEST_PID:-}" ]; then
-        kill "$TEST_PID" 2>/dev/null || true
-        wait "$TEST_PID" 2>/dev/null || true
-    fi
+    local pid
+    pid=$(state_get pid)
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
     rm -rf "$TEST_TMPDIR"
 }
 
-@test "latest_recording_dir returns the newest renamed recording folder" {
-    mkdir -p "$RECORDINGS_DIR/recording_old" "$RECORDINGS_DIR/20260401_sync_client"
-    touch "$RECORDINGS_DIR/recording_old/audio.mp3"
-    sleep 1
-    touch "$RECORDINGS_DIR/20260401_sync_client/transcript.txt"
-
-    result="$(latest_recording_dir)"
-
-    [ "$result" = "$RECORDINGS_DIR/20260401_sync_client" ]
+@test "status is idle without a session" {
+    run cmd_status --json
+    [ "$output" = '{"state": "idle"}' ]
 }
 
-@test "latest_recording_dir ignores folders without recording artifacts" {
-    mkdir -p "$RECORDINGS_DIR/empty_dir" "$RECORDINGS_DIR/20260401_ready"
-    touch "$RECORDINGS_DIR/20260401_ready/summary.md"
+@test "start, pause, resume, stop joins the parts into one dual-track audio.mp3" {
+    cmd_start >/dev/null
+    [ "$(session_state)" = recording ]
 
-    result="$(latest_recording_dir)"
+    cmd_pause >/dev/null
+    [ "$(session_state)" = paused ]
+    run cmd_start
+    [ "$status" -eq 1 ]
 
-    [ "$result" = "$RECORDINGS_DIR/20260401_ready" ]
+    cmd_resume >/dev/null
+    [ "$(session_state)" = recording ]
+
+    cmd_stop >/dev/null
+    [ "$(session_state)" = idle ]
+
+    folder=$(resolve_recording last)
+    [ -f "$folder/audio.mp3" ]
+    ! ls "$folder"/audio.part*.mp3 2>/dev/null
+    duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$folder/audio.mp3")
+    [ "${duration%%.*}" -eq 2 ]
+    [ "$(ffprobe -v error -show_entries format_tags=comment -of default=nw=1:nk=1 "$folder/audio.mp3")" = "$DUAL_TRACK_TAG" ]
+    grep -q '"duration_s": 2' "$folder/meta.json"
+    grep -q '"started_at"' "$folder/meta.json"
 }
 
-@test "cmd_stop fails without tty unless --yes or --only is passed" {
-    sleep 60 &
-    TEST_PID=$!
-    echo "$TEST_PID" > "$PID_FILE"
-    echo "$RECORDINGS_DIR/recording_1" > "$FOLDER_FILE"
-    echo "recording_1" > "$NAME_FILE"
-    date +%s > "$START_TIME_FILE"
+@test "pause and resume refuse the wrong state" {
+    run cmd_pause
+    [ "$status" -eq 1 ]
+    cmd_start >/dev/null
+    run cmd_resume
+    [ "$status" -eq 1 ]
+}
+
+@test "stop keeps what was recorded when ffmpeg died" {
+    cmd_start >/dev/null
+    kill "$(state_get pid)"
+    sleep 0.2
+    [ "$(session_state)" = interrupted ]
 
     run cmd_stop
-
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"Use --yes to process or --only to skip processing."* ]]
-}
-
-@test "cmd_stop --yes processes non-interactively with speaker count and comment" {
-    sleep 60 &
-    TEST_PID=$!
-    echo "$TEST_PID" > "$PID_FILE"
-    echo "$RECORDINGS_DIR/recording_2" > "$FOLDER_FILE"
-    echo "recording_2" > "$NAME_FILE"
-    date +%s > "$START_TIME_FILE"
-
-    cleanup_bt_profile() { :; }
-    notify() { :; }
-    cmd_transcribe() {
-        echo "$1|$2|$3" > "$TEST_TMPDIR/transcribe_args"
-        return 0
-    }
-    cmd_summarize() {
-        printf '%s\n' "$*" > "$TEST_TMPDIR/summarize_args"
-        return 0
-    }
-
-    run cmd_stop --yes --speakers 2 --comment "brief client sync"
-
     [ "$status" -eq 0 ]
-    [ "$(cat "$TEST_TMPDIR/transcribe_args")" = "$RECORDINGS_DIR/recording_2||2" ]
-    [ "$(cat "$TEST_TMPDIR/summarize_args")" = "$RECORDINGS_DIR/recording_2 --comment brief client sync" ]
+    [ -f "$(resolve_recording last)/audio.mp3" ]
 }
 
-@test "cmd_stop rejects an invalid speaker count" {
-    run cmd_stop --yes --speakers nope
+@test "status excludes pauses from the elapsed time" {
+    cmd_start >/dev/null
+    state_set segment_start $(( $(date +%s) - 30 ))
+    cmd_pause >/dev/null
+    state_set recorded 30
+    run cmd_status --json
+    [[ "$output" == *'"state": "paused"'* ]]
+    [[ "$output" == *'"elapsed_s": 30'* ]]
+}
 
+@test "rename refuses the recording in progress" {
+    cmd_start >/dev/null
+    run cmd_rename last point_client
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Invalid speaker count: nope"* ]]
+    [[ "$output" == *"in progress"* ]]
 }
