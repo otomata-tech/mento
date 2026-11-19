@@ -5,7 +5,7 @@ S'arrête au transcript : minutes et synthèse sont faites par la session Claude
 contexte. Le dépôt est aussi un plugin Claude Code (et sa propre marketplace) qui livre
 la skill `skills/mento/`. Le CLI s'appelle comme le service en ligne mento.cc (stockage et
 partage, serveur dans `otomata-tech/mento.cc`), où `mento push` envoie les enregistrements.
-Le dépôt garde le nom `audio-recorder`. Config : `~/.config/mento/config`.
+Config : `~/.config/mento/config`.
 
 ## Installation et dev
 

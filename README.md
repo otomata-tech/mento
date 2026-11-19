@@ -15,7 +15,7 @@ mento search "budget" -C 2
 ## Install
 
 ```bash
-uv tool install git+https://github.com/AlexisLaporte/audio-recorder
+uv tool install git+https://github.com/AlexisLaporte/mento
 mento install   # panel icon at login, app menu entry, Claude Code plugin
 mento setup     # speaker name, tokens, transcription engine
 ```
@@ -81,7 +81,7 @@ the project lives. `mento install` enables it in every Claude Code config
 dir; by hand:
 
 ```
-/plugin install mento --marketplace AlexisLaporte/audio-recorder
+/plugin install mento --marketplace AlexisLaporte/mento
 ```
 
 ## Development

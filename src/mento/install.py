@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .tray import HERE, cli_command
 
-MARKETPLACE = "AlexisLaporte/audio-recorder"
+MARKETPLACE = "AlexisLaporte/mento"
 PLUGIN = "mento@mento"
 LAUNCH_AGENT = Path.home() / "Library/LaunchAgents/cc.mento.tray.plist"
 
@@ -108,8 +108,8 @@ def install_plugin(out):
     for d in claude_dirs():
         markets = json.loads(claude(d, "plugin", "marketplace", "list", "--json").stdout or "[]")
         mine = next((m for m in markets if m["name"] == "mento"), None)
-        if mine and mine.get("source") != "github":
-            claude(d, "plugin", "marketplace", "remove", "mento")  # former local install
+        if mine and (mine.get("source") != "github" or mine.get("repo") != MARKETPLACE):
+            claude(d, "plugin", "marketplace", "remove", "mento")  # local or former repo
             mine = None
         if mine:
             claude(d, "plugin", "marketplace", "update", "mento")
