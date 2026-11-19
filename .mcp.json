@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mento": {
+      "type": "http",
+      "url": "https://mento.cc/mcp",
+      "oauth": {
+        "clientId": "v5g8ftpk2eoaxjukc6kqz",
+        "callbackPort": 7615
+      }
+    }
+  }
+}
