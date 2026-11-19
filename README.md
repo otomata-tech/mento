@@ -20,7 +20,8 @@ mento install   # panel icon at login, app menu entry, Claude Code plugin
 mento setup     # speaker name, tokens, transcription engine
 ```
 
-ffmpeg comes with the package. Per platform:
+ffmpeg comes with the package. Recording is used daily on Linux; on macOS and Windows
+the CI runs the test suite, but capture has not been tried on real hardware yet. Per platform:
 
 - **Linux**: PulseAudio or PipeWire. The panel icon uses AppIndicator from the system
   Python (`gir1.2-ayatanaappindicator3-0.1`, built in on Ubuntu).
