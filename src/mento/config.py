@@ -26,7 +26,7 @@ KEYS = {
     "WHISPER_INITIAL_PROMPT": "Vocabulary always primed (names, products, acronyms)",
     "HF_TOKEN": "HuggingFace token (WhisperX diarization)",
     "MISTRAL_API_KEY": "Mistral API key (Voxtral)",
-    "MENTO_API_TOKEN": "mento.cc API token (push), created on mento.cc",
+    "MENTO_API_TOKEN": "mento.cc API token (push), created on https://app.mento.cc/jetons",
 }
 SECRET_KEYS = {"HF_TOKEN", "MISTRAL_API_KEY", "MENTO_API_TOKEN"}
 # Tuning knobs read from the environment or the file, not asked by setup
