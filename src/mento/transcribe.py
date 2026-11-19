@@ -70,7 +70,7 @@ def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=pr
             "whisperx not found. Install it: uv tool install whisperx --python 3.12 "
             "(or use --engine voxtral)")
     if not cfg.get("HF_TOKEN"):
-        raise TranscribeError("HF_TOKEN not set (diarization): run 'audio-recorder setup'")
+        raise TranscribeError("HF_TOKEN not set (diarization): run 'mento setup'")
     cmd = [exe, str(wav), "--model", model, "--device", cfg.get("WHISPER_DEVICE"),
            "--batch_size", cfg.get("WHISPER_BATCH_SIZE"),
            "--compute_type", cfg.get("WHISPER_COMPUTE_TYPE"),
@@ -105,7 +105,7 @@ def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=pr
 def run_voxtral(wav, cfg, *, model, language, vocab, speakers, log_path, out=print, client=None):
     key = cfg.get("MISTRAL_API_KEY")
     if not key:
-        raise TranscribeError("MISTRAL_API_KEY not set: run 'audio-recorder setup'")
+        raise TranscribeError("MISTRAL_API_KEY not set: run 'mento setup'")
     if speakers:
         out("Voxtral does not take a speaker count — ignored")
     upload = wav.with_suffix(".mp3")

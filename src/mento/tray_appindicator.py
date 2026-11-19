@@ -32,7 +32,7 @@ class Tray:
         self.busy = False
 
         self.indicator = AppIndicator.Indicator.new(
-            "audio-recorder", "audio-recorder-idle",
+            "mento", "mento-idle",
             AppIndicator.IndicatorCategory.APPLICATION_STATUS)
         self.indicator.set_icon_theme_path(str(ICONS))
         self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
@@ -69,7 +69,7 @@ class Tray:
         def work():
             ok, msg = self.model.run(action)
             if not ok:
-                subprocess.run(["notify-send", "audio-recorder", msg])
+                subprocess.run(["notify-send", "mento", msg])
             GLib.idle_add(self.done)
 
         threading.Thread(target=work, daemon=True).start()
@@ -88,7 +88,7 @@ class Tray:
         self.status_item.set_label(model.summary())
         warning = model.new_warning()
         if warning:
-            subprocess.run(["notify-send", "audio-recorder", warning])
+            subprocess.run(["notify-send", "mento", warning])
         self.update_menu()
         return True
 
@@ -118,12 +118,12 @@ def main():
     # One icon only: a second launch (menu, autostart) exits quietly
     runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or Path.home() / ".cache")
     runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(runtime / "audio-recorder-tray.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    fd = os.open(runtime / "mento-tray.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     lock = os.fdopen(fd, "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        print("audio-recorder tray is already running", file=sys.stderr)
+        print("mento tray is already running", file=sys.stderr)
         return 0
     Tray(Model(sys.argv[1:]))
     Gtk.main()

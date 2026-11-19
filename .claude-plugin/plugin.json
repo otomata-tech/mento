@@ -1,7 +1,7 @@
 {
-  "name": "audio-recorder",
-  "version": "2.0.0",
-  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename, push to mento. Needs the audio-recorder CLI (uv tool install).",
+  "name": "mento",
+  "version": "3.0.0",
+  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename, push to mento. Needs the mento CLI (uv tool install git+https://github.com/AlexisLaporte/audio-recorder).",
   "author": {
     "name": "Alexis Laporte"
   },

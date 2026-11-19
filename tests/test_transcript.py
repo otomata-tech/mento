@@ -1,7 +1,7 @@
 import pytest
 
-from audio_recorder.media import ffmpeg
-from audio_recorder.transcript import fmt_stamp, format_lines
+from mento.media import ffmpeg
+from mento.transcript import fmt_stamp, format_lines
 
 SEGMENTS = [
     {"start": 0.2, "end": 1.4, "speaker": "SPEAKER_01", "text": " Bonjour."},

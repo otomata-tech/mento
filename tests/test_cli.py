@@ -1,7 +1,7 @@
 import pytest
 
-from audio_recorder import cli, config
-from audio_recorder.trim import find_cut
+from mento import cli, config
+from mento.trim import find_cut
 
 COMMANDS = ["start", "pause", "resume", "stop", "status", "tray", "transcribe", "trim", "list", "show",
             "cat", "search", "path", "rename", "open", "push", "setup", "install"]
@@ -12,7 +12,7 @@ def test_every_command_has_help(command, capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main([command, "--help"])
     assert exc.value.code == 0
-    assert f"audio-recorder {command}" in capsys.readouterr().out
+    assert f"mento {command}" in capsys.readouterr().out
 
 
 def test_status_idle_json(tmp_path, monkeypatch, capsys):

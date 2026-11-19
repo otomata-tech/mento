@@ -21,7 +21,7 @@ class DeviceError(Exception):
 def pick():
     """(mic, system) soundcard devices; system is None when unavailable."""
     if len(sys.argv) < 2:
-        sys.argv.append("audio-recorder")  # soundcard names its PulseAudio client from argv
+        sys.argv.append("mento")  # soundcard names its PulseAudio client from argv
     import soundcard as sc
 
     try:

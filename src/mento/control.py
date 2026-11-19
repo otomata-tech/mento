@@ -25,14 +25,14 @@ def spawn_recorder(folder):
     else:
         kwargs["start_new_session"] = True
     log = open(Path(folder) / "recorder.log", "ab")
-    subprocess.Popen([sys.executable, "-m", "audio_recorder.recorder", str(folder)],
+    subprocess.Popen([sys.executable, "-m", "mento.recorder", str(folder)],
                      stdin=subprocess.DEVNULL, stdout=log, stderr=log, **kwargs)
 
 
 def start(session, recordings_dir, spawn=spawn_recorder):
     status = session.status()
     if status in ("failed", "interrupted"):
-        raise ControlError(f"previous recording {status} — run 'audio-recorder stop' first")
+        raise ControlError(f"previous recording {status} — run 'mento stop' first")
     if status != "idle":
         raise ControlError(f"already {status}: {Path(session.read()['folder']).name}")
 

@@ -3,8 +3,8 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from audio_recorder import library
-from audio_recorder.library import UsageError
+from mento import library
+from mento.library import UsageError
 
 
 @pytest.fixture

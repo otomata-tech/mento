@@ -1,4 +1,4 @@
-"""audio-recorder command line."""
+"""mento command line."""
 
 import argparse
 import json
@@ -68,8 +68,8 @@ def cmd_status(cfg, session, args):
         return
     labels = {"idle": "■ Not recording", "recording": "● Recording", "paused": "❚❚ Paused",
               "stopping": "… Encoding", "starting": "… Starting",
-              "interrupted": "✗ Interrupted — the recorder died, run 'audio-recorder stop'",
-              "failed": "✗ Failed — run 'audio-recorder stop'"}
+              "interrupted": "✗ Interrupted — the recorder died, run 'mento stop'",
+              "failed": "✗ Failed — run 'mento stop'"}
     line = labels[status]
     if st:
         line += f": {data['id']} ({fmt(data['elapsed_s'])})"
@@ -161,7 +161,7 @@ def cmd_push(cfg, session, args):
 # ── Setup & install ──────────────────────────────────────────────────────────
 
 def cmd_setup(cfg, session, args):
-    print("audio-recorder setup — Enter keeps the current value\n")
+    print("mento setup — Enter keeps the current value\n")
     for key, label in KEYS.items():
         current = cfg.get(key)
         shown = current
@@ -182,9 +182,9 @@ def cmd_install(cfg, session, args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="audio-recorder",
+        prog="mento",
         description="Record meetings (mic left, system audio right) and transcribe them.",
-        epilog=f"{DATES}\nDetails and examples: audio-recorder <command> --help",
+        epilog=f"{DATES}\nDetails and examples: mento <command> --help",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -204,7 +204,7 @@ def build_parser():
     add("pause", cmd_pause, "pause the recording (devices released)")
     add("resume", cmd_resume, "resume a paused recording")
     p = add("stop", cmd_stop, "stop and encode audio.mp3",
-            "Stop and encode audio.mp3. Does not transcribe: run 'audio-recorder transcribe' with\n"
+            "Stop and encode audio.mp3. Does not transcribe: run 'mento transcribe' with\n"
             "the meeting's vocabulary and participants.")
     p.add_argument("--trim", action="store_true",
                    help="cut the trailing audio after the conversation (original kept)")
@@ -216,7 +216,7 @@ def build_parser():
             "Transcribe with speaker diarization into transcript.txt ([mm:ss] SPEAKER: text).\n"
             "Dual-track recordings pin LOCAL_SPEAKER to the mic. Settings are kept in meta.json.\n"
             "WhisperX runs locally (minutes of GPU: run it in background); Voxtral uses the Mistral API.",
-            epilog="Example:\n  audio-recorder transcribe last --prompt \"Acme, DSN, Marie Dupont\" --speakers 3")
+            epilog="Example:\n  mento transcribe last --prompt \"Acme, DSN, Marie Dupont\" --speakers 3")
     p.add_argument("rec", nargs="?", help=f"{REC_HELP}, or a media file path")
     p.add_argument("--engine", choices=ENGINES, help="default: TRANSCRIBE_ENGINE (whisperx)")
     p.add_argument("--prompt", help="vocabulary (names, products, acronyms), added to WHISPER_INITIAL_PROMPT; "
@@ -241,7 +241,7 @@ def build_parser():
     p.add_argument("--json", action="store_true")
 
     p = add("cat", cmd_library("cat"), "print a transcript",
-            epilog=f"{DATES}\nExample:\n  audio-recorder cat last --speaker SPEAKER_01 --from 10:00 --to 25:00")
+            epilog=f"{DATES}\nExample:\n  mento cat last --speaker SPEAKER_01 --from 10:00 --to 25:00")
     rec_arg(p, "ref")
     p.add_argument("--speaker")
     p.add_argument("--from", dest="from_", metavar="T")
@@ -251,7 +251,7 @@ def build_parser():
     p = add("search", cmd_library("search"), "search every transcript",
             "Search every transcript, case and accents ignored. One hit per line:\n"
             "<id> [mm:ss] SPEAKER: text. Exits 1 when nothing matches.",
-            epilog=f"{DATES}\nExample:\n  audio-recorder search \"budget\" --since 30d -C 2")
+            epilog=f"{DATES}\nExample:\n  mento search \"budget\" --since 30d -C 2")
     p.add_argument("query")
     p.add_argument("--since")
     p.add_argument("--speaker")
@@ -261,7 +261,7 @@ def build_parser():
     p = add("path", cmd_path, "print the recording's folder")
     rec_arg(p)
     p = add("rename", cmd_rename, "rename to <date>_NAME (a-z 0-9 _, 50 chars max)",
-            epilog="Example:\n  audio-recorder rename last point_client_onboarding")
+            epilog="Example:\n  mento rename last point_client_onboarding")
     p.add_argument("ref", help=REC_HELP)
     p.add_argument("slug", metavar="NAME")
     p = add("open", cmd_open, "open the recording's folder in the file manager")
@@ -275,7 +275,7 @@ def build_parser():
     add("setup", cmd_setup, "configure tokens, recordings dir, speaker name, engine")
     p = add("install", cmd_install, "panel icon at login, app menu entry, Claude Code plugin",
             "Desktop integration (autostart of the panel icon, app menu entry) and the\n"
-            "audio-recorder plugin in every Claude Code config dir found.")
+            "mento plugin in every Claude Code config dir found.")
     p.add_argument("--uninstall", action="store_true", help="remove all of it")
     return parser
 

@@ -1,23 +1,23 @@
-# audio-recorder
+# mento
 
 Record meetings and transcribe them with speaker diarization, on Linux, macOS and
 Windows — from the terminal, a panel icon, or a Claude Code session that knows the
 meeting's context.
 
 ```bash
-audio-recorder start            # mic on the left channel, system audio on the right
-audio-recorder pause / resume
-audio-recorder stop
-audio-recorder transcribe last --prompt "Acme, DSN, Marie Dupont" --speakers 3
-audio-recorder search "budget" -C 2
+mento start            # mic on the left channel, system audio on the right
+mento pause / resume
+mento stop
+mento transcribe last --prompt "Acme, DSN, Marie Dupont" --speakers 3
+mento search "budget" -C 2
 ```
 
 ## Install
 
 ```bash
 uv tool install git+https://github.com/AlexisLaporte/audio-recorder
-audio-recorder install   # panel icon at login, app menu entry, Claude Code plugin
-audio-recorder setup     # speaker name, tokens, transcription engine
+mento install   # panel icon at login, app menu entry, Claude Code plugin
+mento setup     # speaker name, tokens, transcription engine
 ```
 
 ffmpeg comes with the package. Per platform:
@@ -59,7 +59,7 @@ Every read command takes `--json`; every command takes `--help`.
 | `search TEXT [--since D] [--speaker S] [-C N]` | Search every transcript (case and accents ignored) |
 | `path` / `open` / `rename rec NAME` | Folder path, file manager, rename to `<date>_NAME` |
 | `trim [rec]` | Detect the end of the conversation and cut |
-| `push [rec] [--with-audio]` | Store on [mento](https://mento.cc) for sharing and agent access |
+| `push [rec] [--with-audio]` | Store on [mento.cc](https://mento.cc) for sharing and agent access |
 | `setup` / `install [--uninstall]` | Settings; desktop integration and Claude plugin |
 
 ## Output
@@ -75,13 +75,13 @@ Every read command takes `--json`; every command takes `--help`.
 ## Claude Code plugin
 
 The repo is a Claude Code plugin (and its own marketplace) shipping the
-`audio-recorder` skill: a session finds the meeting, transcribes it with the mission's
+`mento` skill: a session finds the meeting, transcribes it with the mission's
 vocabulary and participant count, names the speakers, then writes the minutes where
-the project lives. `audio-recorder install` enables it in every Claude Code config
+the project lives. `mento install` enables it in every Claude Code config
 dir; by hand:
 
 ```
-/plugin install audio-recorder --marketplace AlexisLaporte/audio-recorder
+/plugin install mento --marketplace AlexisLaporte/audio-recorder
 ```
 
 ## Development

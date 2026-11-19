@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from audio_recorder.push import PushError, push, title_from
+from mento.push import PushError, push, title_from
 
 
 @pytest.fixture

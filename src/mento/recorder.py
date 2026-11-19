@@ -6,7 +6,7 @@ the devices (the mic indicator goes off) and pads the shorter track so both
 stay aligned. Stop encodes them into one stereo audio.mp3: mic on the left,
 system audio on the right, tagged with DUAL_TRACK_TAG.
 
-Usage: python -m audio_recorder.recorder <folder>
+Usage: python -m mento.recorder <folder>
 """
 
 import math
@@ -149,7 +149,7 @@ def run(folder, session, mic, system):
             peak = max(t.peak_db for t in tracks)
             if peak < SILENT_DB:
                 state["warning"] = f"Audio may be empty ({peak:.0f} dB) — check your audio source"
-                media.notify("⚠️ audio-recorder", state["warning"])
+                media.notify("⚠️ mento", state["warning"])
             else:
                 state.pop("warning", None)
             for t in tracks:

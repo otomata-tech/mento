@@ -4,8 +4,8 @@ import time
 import numpy as np
 import pytest
 
-from audio_recorder import config, control, recorder
-from audio_recorder.media import ffmpeg, probe
+from mento import config, control, recorder
+from mento.media import ffmpeg, probe
 
 from .conftest import FakeDevice
 

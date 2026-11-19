@@ -47,7 +47,7 @@ def check(resp, what):
         problem = resp.json()
         detail = problem.get("detail") or problem.get("title") or detail
     if resp.status_code == 401:
-        detail = "invalid token — create one on mento.cc and run 'audio-recorder setup'"
+        detail = "invalid token — create one on mento.cc and run 'mento setup'"
     raise PushError(f"{what} failed (HTTP {resp.status_code}): {detail}")
 
 
@@ -55,10 +55,10 @@ def push(folder, token, base_url=DEFAULT_URL, with_audio=False, client=None, out
     """Creates or updates the recording on mento.cc; returns its id."""
     folder = Path(folder)
     if not token:
-        raise PushError("MENTO_API_TOKEN not set: create a token on mento.cc, then 'audio-recorder setup'")
+        raise PushError("MENTO_API_TOKEN not set: create a token on mento.cc, then 'mento setup'")
     transcript = folder / "transcript.txt"
     if not transcript.exists():
-        raise PushError(f"no transcript: {transcript} — run 'audio-recorder transcribe' first")
+        raise PushError(f"no transcript: {transcript} — run 'mento transcribe' first")
     audio = folder / "audio.mp3"
     if with_audio and not audio.exists():
         raise PushError(f"no audio: {audio}")

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from audio_recorder.config import Config, DEFAULTS
-from audio_recorder.session import Session
+from mento.config import Config, DEFAULTS
+from mento.session import Session
 
 
 @pytest.fixture

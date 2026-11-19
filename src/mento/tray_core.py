@@ -47,7 +47,7 @@ class Model:
         return self.state["state"]
 
     def icon_name(self):
-        return f"audio-recorder-{ICONS[self.status]}"
+        return f"mento-{ICONS[self.status]}"
 
     def elapsed(self):
         return fmt(self.state.get("elapsed_s", 0)) if self.status in ("recording", "paused") else ""

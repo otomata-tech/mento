@@ -21,8 +21,8 @@ SYSTEM_PYTHON = "/usr/bin/python3"
 def cli_command():
     """The CLI of this very install (the script next to this Python)."""
     scripts = Path(sys.executable).parent
-    exe = scripts / ("audio-recorder.exe" if sys.platform == "win32" else "audio-recorder")
-    return [str(exe)] if exe.exists() else [sys.executable, "-m", "audio_recorder"]
+    exe = scripts / ("mento.exe" if sys.platform == "win32" else "mento")
+    return [str(exe)] if exe.exists() else [sys.executable, "-m", "mento"]
 
 
 def main():
@@ -66,7 +66,7 @@ def run_pystray():
     from .tray_core import Model
 
     if not single_instance():
-        print("audio-recorder tray is already running", file=sys.stderr)
+        print("mento tray is already running", file=sys.stderr)
         return 0
 
     model = Model(cli_command())
@@ -82,7 +82,7 @@ def run_pystray():
             def work():
                 ok, msg = model.run(name)
                 if not ok:
-                    icon.notify(msg, "audio-recorder")
+                    icon.notify(msg, "mento")
                 update(icon)
             threading.Thread(target=work, daemon=True).start()
         return run
@@ -97,10 +97,10 @@ def run_pystray():
     def update(icon):
         model.refresh()
         icon.icon = image(model.icon_name())
-        icon.title = f"audio-recorder — {model.summary()}"
+        icon.title = f"mento — {model.summary()}"
         warning = model.new_warning()
         if warning:
-            icon.notify(warning, "audio-recorder")
+            icon.notify(warning, "mento")
         icon.update_menu()
 
     menu = pystray.Menu(
@@ -115,7 +115,7 @@ def run_pystray():
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit icon", lambda icon, _: icon.stop()),
     )
-    icon = pystray.Icon("audio-recorder", image("audio-recorder-idle"), "audio-recorder", menu)
+    icon = pystray.Icon("mento", image("mento-idle"), "mento", menu)
 
     def poll(icon):
         icon.visible = True

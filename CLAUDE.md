@@ -1,24 +1,25 @@
-# audio-recorder
+# mento
 
 CLI Python (Linux, macOS, Windows) pour enregistrer des réunions et les transcrire.
 S'arrête au transcript : minutes et synthèse sont faites par la session Claude qui a le
 contexte. Le dépôt est aussi un plugin Claude Code (et sa propre marketplace) qui livre
-la skill `skills/audio-recorder/`. Stockage et partage : mento (mento.cc, serveur dans
-`otomata-tech/mento.cc`).
+la skill `skills/mento/`. Le CLI s'appelle comme le service en ligne mento.cc (stockage et
+partage, serveur dans `otomata-tech/mento.cc`), où `mento push` envoie les enregistrements.
+Le dépôt garde le nom `audio-recorder`. Config : `~/.config/mento/config`.
 
 ## Installation et dev
 
 ```bash
 uv tool install -e .     # poste d'Alexis : la commande suit le checkout
-audio-recorder install   # icône au démarrage, entrée de menu, plugin dans chaque ~/.claude*/
-audio-recorder setup     # LOCAL_SPEAKER, jetons (HF, Mistral, mento), moteur…
+mento install   # icône au démarrage, entrée de menu, plugin dans chaque ~/.claude*/
+mento setup     # LOCAL_SPEAKER, jetons (HF, Mistral, mento), moteur…
 uv run pytest -q         # via tests-poste sur le poste partagé ; la CI couvre les 3 OS
 ```
 
 WhisperX est un outil à part (`uv tool install whisperx --python 3.12`), appelé en
 commande : il amène PyTorch et impose sa version de Python.
 
-## Architecture (`src/audio_recorder/`)
+## Architecture (`src/mento/`)
 
 - `recorder.py` : processus d'enregistrement détaché (`control.spawn_recorder`). Un thread
   par périphérique (soundcard) écrit `mic.pcm` / `system.pcm` (s16le 48 kHz mono) dans le

@@ -2,7 +2,7 @@
 
 - Panel icon started at login and an app menu entry: a .desktop file on
   Linux, Startup and Start Menu shortcuts on Windows, a LaunchAgent on macOS.
-- The audio-recorder plugin (skill) enabled in every Claude Code config dir
+- The mento plugin (skill) enabled in every Claude Code config dir
   (~/.claude, ~/.claude-<account>), from the GitHub marketplace.
 """
 
@@ -16,32 +16,32 @@ from pathlib import Path
 from .tray import HERE, cli_command
 
 MARKETPLACE = "AlexisLaporte/audio-recorder"
-PLUGIN = "audio-recorder@audio-recorder"
-LAUNCH_AGENT = Path.home() / "Library/LaunchAgents/cc.mento.audio-recorder.tray.plist"
+PLUGIN = "mento@mento"
+LAUNCH_AGENT = Path.home() / "Library/LaunchAgents/cc.mento.tray.plist"
 
 
 def tray_command():
     scripts = Path(sys.executable).parent
     if sys.platform == "win32":
-        return [str(scripts / "audio-recorder-tray.exe")]
-    gui = scripts / "audio-recorder-tray"
+        return [str(scripts / "mento-tray.exe")]
+    gui = scripts / "mento-tray"
     return [str(gui)] if gui.exists() else [*cli_command(), "tray"]
 
 
 # ── Desktop ──────────────────────────────────────────────────────────────────
 
 def linux_files():
-    return (Path.home() / ".local/share/applications/audio-recorder.desktop",
-            Path.home() / ".config/autostart/audio-recorder-tray.desktop")
+    return (Path.home() / ".local/share/applications/mento.desktop",
+            Path.home() / ".config/autostart/mento-tray.desktop")
 
 
 def install_desktop(out):
     command = tray_command()
     if sys.platform.startswith("linux"):
         entry = "\n".join([
-            "[Desktop Entry]", "Type=Application", "Name=Audio Recorder",
+            "[Desktop Entry]", "Type=Application", "Name=Mento",
             "Comment=Record meetings: panel icon to start, pause and stop",
-            f"Exec={' '.join(command)}", f"Icon={HERE / 'icons' / 'audio-recorder.svg'}",
+            f"Exec={' '.join(command)}", f"Icon={HERE / 'icons' / 'mento.svg'}",
             "Categories=AudioVideo;Audio;", "Keywords=record;meeting;transcript;", ""])
         app, autostart = linux_files()
         for path in (app, autostart):
@@ -49,9 +49,9 @@ def install_desktop(out):
             path.write_text(entry + ("X-GNOME-Autostart-enabled=true\n" if path == autostart else ""))
         out(f"✓ App menu entry and login item ({autostart})")
     elif sys.platform == "win32":
-        icon = HERE / "icons" / "audio-recorder.png"
+        icon = HERE / "icons" / "mento.png"
         for folder in ("Startup", "."):
-            link = windows_programs() / folder / "Audio Recorder.lnk"
+            link = windows_programs() / folder / "Mento.lnk"
             ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LINK);"
                   "$s.TargetPath=$env:TARGET;$s.IconLocation=$env:ICON;$s.Save()")
             subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True,
@@ -66,7 +66,7 @@ def install_desktop(out):
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
             '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
             '<plist version="1.0"><dict>'
-            "<key>Label</key><string>cc.mento.audio-recorder.tray</string>"
+            "<key>Label</key><string>cc.mento.tray</string>"
             f"<key>ProgramArguments</key><array>{args}</array>"
             "<key>RunAtLoad</key><true/></dict></plist>\n")
         out(f"✓ Login item ({LAUNCH_AGENT})")
@@ -76,7 +76,7 @@ def uninstall_desktop(out):
     if sys.platform.startswith("linux"):
         paths = linux_files()
     elif sys.platform == "win32":
-        paths = [windows_programs() / f / "Audio Recorder.lnk" for f in ("Startup", ".")]
+        paths = [windows_programs() / f / "Mento.lnk" for f in ("Startup", ".")]
     else:
         paths = [LAUNCH_AGENT]
     for path in paths:
@@ -103,16 +103,16 @@ def claude(config_dir, *args):
 
 def install_plugin(out):
     if not shutil.which("claude"):
-        out(f"! Claude Code not found — later: /plugin install audio-recorder --marketplace {MARKETPLACE}")
+        out(f"! Claude Code not found — later: /plugin install mento --marketplace {MARKETPLACE}")
         return
     for d in claude_dirs():
         markets = json.loads(claude(d, "plugin", "marketplace", "list", "--json").stdout or "[]")
-        mine = next((m for m in markets if m["name"] == "audio-recorder"), None)
+        mine = next((m for m in markets if m["name"] == "mento"), None)
         if mine and mine.get("source") != "github":
-            claude(d, "plugin", "marketplace", "remove", "audio-recorder")  # former local install
+            claude(d, "plugin", "marketplace", "remove", "mento")  # former local install
             mine = None
         if mine:
-            claude(d, "plugin", "marketplace", "update", "audio-recorder")
+            claude(d, "plugin", "marketplace", "update", "mento")
         else:
             claude(d, "plugin", "marketplace", "add", MARKETPLACE)
         installed = json.loads(claude(d, "plugin", "list", "--json").stdout or "[]")

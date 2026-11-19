@@ -1,7 +1,7 @@
 """Configuration and per-user locations.
 
 The config file keeps the shell-compatible KEY="value" format of the first
-versions (~/.config/audio-recorder/config on Linux, the platform's config dir
+versions (~/.config/mento/config on Linux, the platform's config dir
 elsewhere). Environment variables override it.
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import platformdirs
 
-APP = "audio-recorder"
+APP = "mento"
 
 # Recordings tagged with this keep the mic on the left channel and the system
 # audio on the right, which transcript.py uses to pin the local speaker.

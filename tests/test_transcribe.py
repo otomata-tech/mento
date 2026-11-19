@@ -1,9 +1,9 @@
 import httpx
 import pytest
 
-from audio_recorder import transcribe as tr
-from audio_recorder.library import read_meta
-from audio_recorder.media import ffmpeg
+from mento import transcribe as tr
+from mento.library import read_meta
+from mento.media import ffmpeg
 
 
 def test_parse_speakers():
