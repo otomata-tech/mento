@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
-"""Format a WhisperX JSON into transcript lines, fixing the local speaker.
+"""Transcript lines from diarized segments, fixing the local speaker.
 
-Dual-track recordings (--dual-track, see DUAL_TRACK_TAG in lib/config.sh)
-carry the mic on the left channel and the system audio on the right. For
-those, segments where the mic is active — beyond what the speakers leak
-into it — are attributed to the local speaker, overriding pyannote, which
-only guesses from the mixed voice and often mislabels short replies.
-Remote speakers keep their labels.
-
-Usage: transcript.py <whisperx.json> <audio> [--dual-track] [--local-speaker NAME]
+Dual-track recordings (see DUAL_TRACK_TAG in config.py) carry the mic on the
+left channel and the system audio on the right. For those, segments where
+the mic is active — beyond what the speakers leak into it — are attributed
+to the local speaker, overriding the diarization, which only guesses from the
+mixed voice and often mislabels short replies. Remote speakers keep their
+labels.
 """
 
-import argparse
 import array
-import json
 import math
-import subprocess
 import sys
+
+from .media import ffmpeg
 
 SAMPLE_RATE = 4000  # energy only: the speech band below 2 kHz is enough
 FRAME = SAMPLE_RATE // 10  # 100 ms
@@ -26,11 +22,8 @@ MIN_REMOTE_ACTIVITY = 0.05  # below this, nothing plays remotely: in-room meetin
 
 
 def load_channels(audio):
-    raw = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", audio, "-ac", "2", "-ar", str(SAMPLE_RATE),
-         "-f", "s16le", "-"],
-        capture_output=True, check=True,
-    ).stdout
+    raw = ffmpeg("-i", str(audio), "-ac", "2", "-ar", str(SAMPLE_RATE), "-f", "s16le", "-",
+                 capture=True)
     samples = array.array("h")
     samples.frombytes(raw)
     if sys.byteorder == "big":
@@ -76,30 +69,23 @@ def is_local(frames, start, end):
     return n_active > 0 and sum(local[i] for i in span) >= n_active / 2
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("json_path")
-    parser.add_argument("audio")
-    parser.add_argument("--dual-track", action="store_true")
-    parser.add_argument("--local-speaker", default="ME")
-    args = parser.parse_args()
+def fmt_stamp(seconds):
+    h, rest = divmod(int(seconds), 3600)
+    m, s = divmod(rest, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
-    with open(args.json_path) as f:
-        segments = json.load(f).get("segments", [])
 
-    frames = local_frames(*load_channels(args.audio)) if args.dual_track else None
-
+def format_lines(segments, audio, dual_track, local_speaker):
+    """[(mm:ss) SPEAKER: text] lines; segments are {start, end, speaker, text}."""
+    frames = local_frames(*load_channels(audio)) if dual_track else None
+    lines = []
     for seg in segments:
         text = seg.get("text", "").strip()
         if not text:
             continue
         start = seg.get("start", 0)
-        speaker = seg.get("speaker", "UNKNOWN")
+        speaker = seg.get("speaker") or "UNKNOWN"
         if frames and is_local(frames, start, seg.get("end", start)):
-            speaker = args.local_speaker
-        mm, ss = divmod(int(start), 60)
-        print(f"[{mm:02d}:{ss:02d}] {speaker}: {text}")
-
-
-if __name__ == "__main__":
-    main()
+            speaker = local_speaker
+        lines.append(f"[{fmt_stamp(start)}] {speaker}: {text}")
+    return lines

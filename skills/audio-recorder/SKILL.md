@@ -5,16 +5,19 @@ description: Enregistrements de réunions d'Alexis (audio-recorder) — retrouve
 
 # audio-recorder
 
-CLI qui enregistre les réunions (micro à gauche, audio système à droite) et les
-transcrit avec WhisperX. Il s'arrête au transcript : les minutes, la synthèse et
-le classement sont faits par la session Claude qui a le contexte de la mission.
+CLI (Linux, macOS, Windows) qui enregistre les réunions (micro à gauche, audio
+système à droite) et les transcrit : WhisperX en local, ou Voxtral (API Mistral)
+sur une machine sans carte graphique. Il s'arrête au transcript : les minutes, la
+synthèse et le classement sont faits par la session Claude qui a le contexte de la
+mission. Le stockage et le partage passent, en option, par mento (mento.cc).
 
 Un enregistrement se désigne par son id (nom du dossier), un préfixe ou un
 morceau unique de ce nom, ou `last`. Toutes les commandes de lecture ont `--json` ;
 `audio-recorder <commande> --help` donne l'usage détaillé et des exemples.
 
 Si `audio-recorder` est introuvable, le CLI n'est pas installé : le dire, avec
-`git clone https://github.com/AlexisLaporte/audio-recorder && ./install.sh`.
+`uv tool install git+https://github.com/AlexisLaporte/audio-recorder` puis
+`audio-recorder install` (icône, plugin) et `audio-recorder setup` (jetons).
 
 ## Retrouver et lire
 
@@ -27,8 +30,8 @@ audio-recorder path <rec>                # dossier : audio.mp3, transcript.txt, 
 ```
 
 `search` ignore la casse et les accents. Format d'une ligne de transcript :
-`[mm:ss] INTERVENANT: texte`. L'intervenant local (Alexis) est fixé par la piste
-micro ; les autres sont `SPEAKER_00`, `SPEAKER_01`… (pyannote).
+`[mm:ss] INTERVENANT: texte` (`[h:mm:ss]` au-delà d'une heure). L'intervenant local
+(Alexis) est fixé par la piste micro ; les autres sont `SPEAKER_00`, `SPEAKER_01`…
 
 ## Transcrire
 
@@ -43,7 +46,10 @@ audio-recorder transcribe <rec> --prompt "Olneia, URSSAF, DSN, Marie Dupont" --s
 - `--prompt` s'ajoute au vocabulaire global de la config ; 30 à 50 termes max
   (Whisper ne garde que ~220 tokens).
 - `--speakers` est le réglage qui améliore le plus la diarization : compte tous
-  les participants, Alexis compris.
+  les participants, Alexis compris. Voxtral ne le prend pas.
+- `--engine voxtral` envoie l'audio à Mistral (`MISTRAL_API_KEY`) : à éviter pour
+  une réunion confidentielle sans l'accord d'Alexis. Le moteur par défaut est
+  `TRANSCRIBE_ENGINE` (whisperx).
 - Plusieurs minutes de GPU : lance-la en arrière-plan. Les réglages sont gardés
   dans `meta.json` (`show` les affiche) ; relancer écrase le transcript.
 
@@ -55,6 +61,10 @@ audio-recorder transcribe <rec> --prompt "Olneia, URSSAF, DSN, Marie Dupont" --s
    le dossier de l'enregistrement, dont le transcript reste la source brute.
 3. Donner un nom parlant : `audio-recorder rename <rec> point_client_onboarding`
    (`[a-z0-9_]`, 50 caractères, le préfixe de date est conservé).
+4. Si Alexis veut partager ou garder la réunion en ligne : `audio-recorder push <rec>`
+   (`--with-audio` pour le mp3) l'envoie sur mento, puis la synthèse et le lien de
+   partage passent par le MCP ou le connecteur oto de mento. Le push est idempotent :
+   le relancer met à jour.
 
 ## Enregistrer
 

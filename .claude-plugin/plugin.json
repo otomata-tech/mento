@@ -1,10 +1,18 @@
 {
   "name": "audio-recorder",
-  "version": "1.0.0",
-  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename. Needs the audio-recorder CLI (install.sh).",
-  "author": { "name": "Alexis Laporte" },
+  "version": "2.0.0",
+  "description": "Meeting recordings for Claude Code: find, read and search transcripts, transcribe with the meeting's context (vocabulary, participants), rename, push to mento. Needs the audio-recorder CLI (uv tool install).",
+  "author": {
+    "name": "Alexis Laporte"
+  },
   "homepage": "https://github.com/AlexisLaporte/audio-recorder",
   "repository": "https://github.com/AlexisLaporte/audio-recorder",
   "license": "MIT",
-  "keywords": ["meeting", "recording", "transcript", "whisperx", "diarization"]
+  "keywords": [
+    "meeting",
+    "recording",
+    "transcript",
+    "whisperx",
+    "diarization"
+  ]
 }

@@ -1,35 +1,24 @@
-#!/usr/bin/env python3
-"""Read side of the recordings library, plus the helpers the shell relies on.
+"""Recordings library: list, show, cat, search, rename, and meta.json.
 
-A recording is a folder of the recordings dir holding audio.mp3, the parts
-of a recording in progress (audio.partNN.mp3) or transcript.txt. Its id is
-the folder name. meta.json keeps what the shell learned about it: start
-time, duration, transcription settings.
-
-Usage: recordings.py --root DIR <command> ...
-  resolve [REF]                 absolute path of a recording (default: last)
-  list [--since D] [--limit N] [--json]
-  show REF [--json]
-  cat REF [--speaker S] [--from T] [--to T] [--json]
-  search QUERY [--since D] [--speaker S] [-C N] [--json]
-  rename REF SLUG               keeps the date prefix, prints the new path
-  meta-set FOLDER key=str key:=json ...
+A recording is a folder of the recordings dir holding audio.mp3, the tracks
+of a recording in progress (mic.pcm) or transcript.txt. Its id is the folder
+name. meta.json keeps what is known about it: start time, duration,
+transcription settings.
 """
 
-import argparse
 import datetime as dt
 import json
-import os
 import re
-import subprocess
 import sys
 import unicodedata
 from pathlib import Path
 
-LINE_RE = re.compile(r"^\[(\d+):(\d{2})\] (.+?): (.*)$")
+from .media import probe
+
+# [mm:ss] or [h:mm:ss]; older transcripts let minutes go past 59
+LINE_RE = re.compile(r"^\[(?:(\d+):)?(\d+):(\d{2})\] (.+?): (.*)$")
 DATE_RE = re.compile(r"^(?:recording_)?(\d{8})(?:_(\d{6}))?")
 SLUG_RE = re.compile(r"^[a-z0-9_]{1,50}$")
-PART_GLOB = "audio.part*.mp3"
 
 
 class UsageError(Exception):
@@ -42,7 +31,7 @@ def is_recording(folder):
     return folder.is_dir() and (
         (folder / "audio.mp3").exists()
         or (folder / "transcript.txt").exists()
-        or any(folder.glob(PART_GLOB))
+        or (folder / "mic.pcm").exists()
     )
 
 
@@ -54,6 +43,21 @@ def all_recordings(root):
 def read_meta(folder):
     path = folder / "meta.json"
     return json.loads(path.read_text()) if path.exists() else {}
+
+
+def set_meta(folder, updates):
+    """Merges updates into meta.json (nested dicts are merged too)."""
+    meta = read_meta(folder)
+
+    def merge(target, source):
+        for key, value in source.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                merge(target[key], value)
+            else:
+                target[key] = value
+
+    merge(meta, updates)
+    write_meta(folder, meta)
 
 
 def write_meta(folder, meta):
@@ -90,12 +94,7 @@ def duration(folder):
     audio = folder / "audio.mp3"
     if not audio.exists():
         return None
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", str(audio)],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    meta["duration_s"] = round(float(out))
+    meta["duration_s"] = round(probe(audio)["duration"])
     write_meta(folder, meta)
     return meta["duration_s"]
 
@@ -142,9 +141,9 @@ def read_lines(folder):
     for raw in path.read_text().splitlines():
         m = LINE_RE.match(raw)
         if m:
-            t = int(m.group(1)) * 60 + int(m.group(2))
+            t = int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
             lines.append({"t": t, "time": fmt_time(t),
-                          "speaker": m.group(3), "text": m.group(4)})
+                          "speaker": m.group(4), "text": m.group(5)})
     return lines
 
 
@@ -221,11 +220,7 @@ def emit_json(data):
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 
-def cmd_resolve(root, args):
-    print(resolve(root, args.ref))
-
-
-def cmd_list(root, args):
+def do_list(root, args):
     recs = all_recordings(root)
     if args.since:
         since = parse_since(args.since)
@@ -246,7 +241,7 @@ def cmd_list(root, args):
               f"{fmt_duration(r['duration_s']):>6}  {r['state']:<11}  {speakers}{trimmed}".rstrip())
 
 
-def cmd_show(root, args):
+def do_show(root, args):
     folder = resolve(root, args.ref)
     info = summary(folder)
     meta = read_meta(folder)
@@ -262,7 +257,7 @@ def cmd_show(root, args):
     tr = info["transcription"]
     if tr:
         print("  transcription")
-        for key in ("transcribed_at", "model", "language", "speakers", "prompt", "dual_track"):
+        for key in ("transcribed_at", "engine", "model", "language", "speakers", "prompt", "dual_track"):
             value = tr.get(key)
             if value not in (None, ""):
                 if isinstance(value, bool):
@@ -274,7 +269,7 @@ def cmd_show(root, args):
             print(f"    {s['name']:<14} {s['lines']:>4}  {fmt_duration(s['seconds'])}")
 
 
-def cmd_cat(root, args):
+def do_cat(root, args):
     folder = resolve(root, args.ref)
     if not (folder / "transcript.txt").exists():
         raise UsageError(f"not transcribed yet: {folder.name}")
@@ -293,7 +288,7 @@ def cmd_cat(root, args):
         print(f"[{x['time']}] {x['speaker']}: {x['text']}")
 
 
-def cmd_search(root, args):
+def do_search(root, args):
     query = fold(args.query)
     recs = all_recordings(root)
     if args.since:
@@ -330,7 +325,7 @@ def cmd_search(root, args):
         return 1
 
 
-def cmd_rename(root, args):
+def do_rename(root, args):
     folder = resolve(root, args.ref)
     if not SLUG_RE.match(args.slug):
         raise UsageError(f"invalid name: {args.slug} (only a-z 0-9 _, 50 chars max)")
@@ -342,89 +337,3 @@ def cmd_rename(root, args):
         raise UsageError(f"already exists: {target.name}")
     folder.rename(target)
     print(target)
-
-
-def cmd_meta_set(root, args):
-    folder = Path(args.folder)
-    if not folder.is_dir():
-        raise UsageError(f"not a folder: {folder}")
-    meta = read_meta(folder)
-    for pair in args.pairs:
-        if ":=" in pair:
-            key, raw = pair.split(":=", 1)
-            value = json.loads(raw)
-        elif "=" in pair:
-            key, value = pair.split("=", 1)
-        else:
-            raise UsageError(f"expected key=value or key:=json, got: {pair}")
-        target = meta
-        *parents, leaf = key.split(".")
-        for p in parents:
-            target = target.setdefault(p, {})
-        target[leaf] = value
-    write_meta(folder, meta)
-
-
-def main():
-    parser = argparse.ArgumentParser(prog="recordings.py")
-    parser.add_argument("--root", required=True)
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    p = sub.add_parser("resolve")
-    p.add_argument("ref", nargs="?")
-    p.set_defaults(func=cmd_resolve)
-
-    p = sub.add_parser("list")
-    p.add_argument("--since")
-    p.add_argument("--limit", type=int)
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(func=cmd_list)
-
-    p = sub.add_parser("show")
-    p.add_argument("ref", nargs="?")
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(func=cmd_show)
-
-    p = sub.add_parser("cat")
-    p.add_argument("ref", nargs="?")
-    p.add_argument("--speaker")
-    p.add_argument("--from", dest="from_")
-    p.add_argument("--to")
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(func=cmd_cat)
-
-    p = sub.add_parser("search")
-    p.add_argument("query")
-    p.add_argument("--since")
-    p.add_argument("--speaker")
-    p.add_argument("-C", "--context", type=int, default=0)
-    p.add_argument("--json", action="store_true")
-    p.set_defaults(func=cmd_search)
-
-    p = sub.add_parser("rename")
-    p.add_argument("ref")
-    p.add_argument("slug")
-    p.set_defaults(func=cmd_rename)
-
-    p = sub.add_parser("meta-set")
-    p.add_argument("folder")
-    p.add_argument("pairs", nargs="+")
-    p.set_defaults(func=cmd_meta_set)
-
-    args = parser.parse_args()
-    root = Path(args.root)
-    if not root.is_dir():
-        print(f"✗ recordings dir not found: {root}", file=sys.stderr)
-        return 1
-    try:
-        return args.func(root, args) or 0
-    except UsageError as e:
-        print(f"✗ {e}", file=sys.stderr)
-        return 1
-    except BrokenPipeError:
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-        return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
