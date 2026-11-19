@@ -42,7 +42,7 @@ def all_recordings(root):
 
 def read_meta(folder):
     path = folder / "meta.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 def set_meta(folder, updates):
@@ -63,7 +63,7 @@ def set_meta(folder, updates):
 def write_meta(folder, meta):
     path = folder / "meta.json"
     tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+    tmp.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(path)
 
 
@@ -138,7 +138,7 @@ def read_lines(folder):
     if not path.exists():
         return []
     lines = []
-    for raw in path.read_text().splitlines():
+    for raw in path.read_text(encoding="utf-8").splitlines():
         m = LINE_RE.match(raw)
         if m:
             t = int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))

@@ -281,6 +281,10 @@ def build_parser():
 
 
 def main(argv=None):
+    # Windows consoles and pipes default to a legacy code page: transcripts are UTF-8
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
