@@ -78,7 +78,8 @@ audio_watchdog() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 state_get() { cat "$STATE_DIR/$1" 2>/dev/null || true; }
-state_set() { mkdir -p "$STATE_DIR" && echo "$2" > "$STATE_DIR/$1"; }
+# shellcheck disable=SC2174  # only the state dir itself needs 0700
+state_set() { mkdir -p -m 700 "$STATE_DIR" && echo "$2" > "$STATE_DIR/$1"; }
 
 # idle | recording | paused | interrupted (ffmpeg died while recording)
 session_state() {

@@ -157,8 +157,10 @@ def main():
         print(__doc__, file=sys.stderr)
         return 1
     # One icon only: a second launch (menu, autostart) exits quietly
-    lock_path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "audio-recorder-tray.lock"
-    lock = open(lock_path, "w")
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or Path.home() / ".cache")
+    runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(runtime / "audio-recorder-tray.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    lock = os.fdopen(fd, "w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:

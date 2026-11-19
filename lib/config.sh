@@ -13,7 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OS="$(uname -s)"
 RECORDINGS_DIR="$HOME/Recordings"
 # Recording session state (lib/audio.sh): folder, ffmpeg pid, paused flag…
-STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/audio-recorder"
+# Private to the user: never the shared /tmp (no XDG_RUNTIME_DIR on macOS).
+STATE_DIR="${XDG_RUNTIME_DIR:-$HOME/.cache}/audio-recorder"
 
 # Recordings tagged with this keep the mic on the left channel and the system
 # audio on the right (lib/audio.sh), which lib/transcript.py uses to pin the
