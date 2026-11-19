@@ -63,12 +63,30 @@ def prepare_input(audio, dual_track, workdir):
 
 # ── Engines ──────────────────────────────────────────────────────────────────
 
-def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=print):
+def whisperx_exe():
     exe = shutil.which("whisperx")
     if not exe:
         raise TranscribeError(
             "whisperx not found. Install it: uv tool install whisperx --python 3.12 "
             "(or use --engine voxtral)")
+    return exe
+
+
+def whisperx_python():
+    """The Python of the WhisperX tool: the one that can import faster_whisper."""
+    exe = Path(os.path.realpath(whisperx_exe()))
+    for name in ("python", "python3", "python.exe"):
+        if (exe.parent / name).exists():
+            return str(exe.parent / name)
+    with open(exe, "rb") as f:  # a uv tool script names its interpreter on the shebang line
+        first = f.readline().decode("utf-8", "replace")
+    if first.startswith("#!") and Path(first[2:].strip()).exists():
+        return first[2:].strip()
+    raise TranscribeError(f"cannot find the Python of the whisperx tool next to {exe}")
+
+
+def run_whisperx(wav, cfg, *, model, language, vocab, speakers, log_path, out=print):
+    exe = whisperx_exe()
     if not cfg.get("HF_TOKEN"):
         raise TranscribeError("HF_TOKEN not set (diarization): run 'mento setup'")
     cmd = [exe, str(wav), "--model", model, "--device", cfg.get("WHISPER_DEVICE"),

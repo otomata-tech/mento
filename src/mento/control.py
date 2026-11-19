@@ -16,17 +16,21 @@ class ControlError(Exception):
     pass
 
 
-def spawn_recorder(folder):
-    """Launches the recorder detached from this terminal; its log stays in the folder."""
+def spawn_detached(module, folder, *args, log_name):
+    """Runs `python -m <module> <folder> <args>` detached from this terminal, logging in the folder."""
     kwargs = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
                                    | subprocess.CREATE_NO_WINDOW)
     else:
         kwargs["start_new_session"] = True
-    log = open(Path(folder) / "recorder.log", "ab")
-    subprocess.Popen([sys.executable, "-m", "mento.recorder", str(folder)],
-                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, **kwargs)
+    with open(Path(folder) / log_name, "ab") as log:
+        subprocess.Popen([sys.executable, "-m", module, str(folder), *args],
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log, **kwargs)
+
+
+def spawn_recorder(folder):
+    spawn_detached("mento.recorder", folder, log_name="recorder.log")
 
 
 def start(session, recordings_dir, spawn=spawn_recorder):
@@ -51,6 +55,26 @@ def start(session, recordings_dir, spawn=spawn_recorder):
     if status != "recording":
         raise ControlError(f"recorder did not start (status: {status}), see {folder / 'recorder.log'}")
     return folder, session.read()
+
+
+def start_live(session, engine, model=None, prompt="", language=None, spawn=spawn_detached):
+    """Starts live transcription of the recording in progress; False if it already runs."""
+    from .live import is_running, mark_starting
+    if session.status() not in ("recording", "paused"):
+        raise ControlError(f"no recording in progress ({session.status()})")
+    folder = Path(session.read()["folder"])
+    if is_running(folder):
+        return folder, False
+    args = ["--engine", engine]
+    if model:
+        args += ["--model", model]
+    if prompt:
+        args += ["--prompt", prompt]
+    if language is not None:
+        args += ["--language", language]
+    mark_starting(folder)
+    spawn("mento.live", folder, *args, log_name="live.log")
+    return folder, True
 
 
 def pause(session):

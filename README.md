@@ -43,6 +43,14 @@ Two engines, chosen with `--engine` or `TRANSCRIBE_ENGINE`:
 On dual-track recordings, the local speaker (`LOCAL_SPEAKER`) is pinned from the mic
 track; diarization only tells the remote speakers apart.
 
+**Live transcript** (`mento start --live`, or `mento live` during a recording): a
+process follows the tracks and transcribes a piece every ~20 s, cut at a pause;
+`live.txt` grows in the recording folder (`mento live -f` follows it). Same engines:
+`whisperx` keeps a faster-whisper model loaded for the whole meeting (the one shipped
+with the WhisperX tool, nothing leaves the machine), `voxtral` sends the pieces to
+Mistral. Live lines tell `LOCAL_SPEAKER` from `OTHERS` only; the diarized
+`transcript.txt` is still made after `stop`.
+
 ## Commands
 
 `rec` is a recording id (folder name), a unique prefix or part of it, or `last`.
@@ -50,7 +58,8 @@ Every read command takes `--json`; every command takes `--help`.
 
 | Command | Description |
 |---------|-------------|
-| `start` / `pause` / `resume` / `stop [--trim]` | Record in the background (pauses excluded) |
+| `start [--live]` / `pause` / `resume` / `stop [--trim]` | Record in the background (pauses excluded) |
+| `live [-f]` | Live transcript of the recording in progress (`--engine`, `--model`, `--prompt`, `--language`) |
 | `status [--json]` | State and duration |
 | `tray` | Panel icon: start, pause, stop, recent recordings |
 | `transcribe [rec\|file]` | `--engine`, `--prompt`, `--speakers N\|MIN-MAX`, `--language`, `--model` |
@@ -70,6 +79,7 @@ Every read command takes `--json`; every command takes `--help`.
 └── 20261118_point_client/
     ├── audio.mp3          # stereo: mic left, system audio right
     ├── transcript.txt     # [mm:ss] SPEAKER: text
+    ├── live.txt           # live transcript, if any (LOCAL_SPEAKER / OTHERS)
     └── meta.json          # start, duration, transcription settings
 ```
 

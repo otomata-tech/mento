@@ -46,7 +46,11 @@ def activity(dbs):
 
 def local_frames(mic, system):
     """Per frame: (local speech, any speech). None when no remote side played."""
-    mic_db, sys_db = frame_db(mic), frame_db(system)
+    return classify(frame_db(mic), frame_db(system))
+
+
+def classify(mic_db, sys_db):
+    """local_frames from the per-frame levels of both channels (100 ms frames)."""
     if not mic_db:
         return None
     mic_on, sys_on = activity(mic_db), activity(sys_db)

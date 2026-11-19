@@ -4,11 +4,13 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from . import __version__, control, library
 from .config import KEYS, SECRET_KEYS, Config, state_dir
 from .devices import DeviceError
+from .live import LiveError, check_ready, engine_and_model
 from .media import MediaError
 from .push import PushError
 from .session import Session
@@ -19,7 +21,7 @@ REC_HELP = "recording: id (folder name), a unique prefix or part of it, or 'last
 DATES = "Dates: YYYY-MM-DD or Nd (7d = last 7 days). Times: SS, MM:SS or H:MM:SS."
 
 ERRORS = (library.UsageError, control.ControlError, TranscribeError, TrimError, PushError,
-          MediaError, DeviceError)
+          MediaError, DeviceError, LiveError)
 
 
 def fmt(seconds):
@@ -28,12 +30,24 @@ def fmt(seconds):
 
 # ── Recording ────────────────────────────────────────────────────────────────
 
+def live_engine(cfg, args):
+    """(engine, model) of the live transcription, checked before anything starts."""
+    engine, model = engine_and_model(cfg, args.engine, args.model)
+    check_ready(cfg, engine)
+    return engine, model
+
+
 def cmd_start(cfg, session, args):
+    if args.live:
+        engine, model = live_engine(cfg, args)
     folder, state = control.start(session, cfg.recordings_dir)
     print(f"● Recording  {folder.name}")
     if not state.get("system_audio"):
         print("! No system audio device: only the mic is recorded "
               "(macOS: install BlackHole or Background Music)")
+    if args.live:
+        control.start_live(session, engine, model, args.prompt or "", args.language)
+        print(f"● Live transcript  {folder / 'live.txt'}")
 
 
 def cmd_pause(cfg, session, args):
@@ -77,6 +91,31 @@ def cmd_status(cfg, session, args):
     for key in ("warning", "error"):
         if key in data:
             print(f"  ! {data[key]}")
+
+
+def cmd_live(cfg, session, args):
+    from . import live
+    engine, model = live_engine(cfg, args)
+    folder, started = control.start_live(session, engine, model, args.prompt or "", args.language)
+    if started:
+        print(f"● Live transcription started ({engine}, {model}, a piece every ~{live.CUT_AFTER_S} s)",
+              file=sys.stderr)
+    elif args.prompt or args.language or args.engine or args.model:
+        print("! Live transcription already runs: its settings are kept", file=sys.stderr)
+    path = live.live_file(folder)
+    shown = 0
+    while True:
+        if path.exists():
+            text = path.read_text(encoding="utf-8")
+            sys.stdout.write(text[shown:])
+            sys.stdout.flush()
+            shown = len(text)
+        if not args.follow or not live.is_running(folder):
+            break
+        time.sleep(live.POLL_S)
+    st = live.read_state(folder) or {}
+    if st.get("error"):
+        print(f"! {st['error']}", file=sys.stderr)
 
 
 def cmd_tray(cfg, session, args):
@@ -199,8 +238,20 @@ def build_parser():
     def rec_arg(p, name="rec"):
         p.add_argument(name, nargs="?", help=REC_HELP)
 
-    add("start", cmd_start, "start recording",
-        "Start recording in the background: mic on the left channel, system audio on the right.")
+    def live_args(p):
+        p.add_argument("--live", action="store_true",
+                       help="transcribe as it goes into live.txt (see 'mento live')")
+        engine_args(p, "live ")
+
+    def engine_args(p, prefix=""):
+        p.add_argument("--engine", choices=ENGINES, help=f"{prefix}engine (default: TRANSCRIBE_ENGINE)")
+        p.add_argument("--model", help=f"{prefix}model (default: WHISPER_MODEL or VOXTRAL_MODEL)")
+        p.add_argument("--prompt", help=f"{prefix}vocabulary, added to WHISPER_INITIAL_PROMPT")
+        p.add_argument("--language", help=f"{prefix}language (default: WHISPER_LANGUAGE)")
+
+    p = add("start", cmd_start, "start recording",
+            "Start recording in the background: mic on the left channel, system audio on the right.")
+    live_args(p)
     add("pause", cmd_pause, "pause the recording (devices released)")
     add("resume", cmd_resume, "resume a paused recording")
     p = add("stop", cmd_stop, "stop and encode audio.mp3",
@@ -210,6 +261,15 @@ def build_parser():
                    help="cut the trailing audio after the conversation (original kept)")
     p = add("status", cmd_status, "recording state and duration (pauses excluded)")
     p.add_argument("--json", action="store_true", help='{"state", "id", "path", "elapsed_s", "warning"}')
+    p = add("live", cmd_live, "live transcript of the recording in progress",
+            "Transcribe the recording in progress as it goes, into live.txt in its folder:\n"
+            "a piece every ~20 s, LOCAL_SPEAKER told apart from OTHERS by the mic track.\n"
+            "whisperx: faster-whisper loaded once, on this machine; voxtral: the Mistral API.\n"
+            "Starts it if needed, then prints live.txt. Remote speakers are diarized only by\n"
+            "'mento transcribe' after 'stop'.",
+            epilog="Example:\n  mento live -f --prompt \"Acme, DSN\" --language fr")
+    p.add_argument("-f", "--follow", action="store_true", help="keep printing until the recording stops")
+    engine_args(p)
     add("tray", cmd_tray, "panel icon: start, pause, stop, recent recordings")
 
     p = add("transcribe", cmd_transcribe, "transcribe a recording or a media file",

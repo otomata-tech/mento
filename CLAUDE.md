@@ -32,6 +32,12 @@ commande : il amène PyTorch et impose sa version de Python.
   Pulse/PipeWire, WASAPI) ; macOS : BlackHole / Background Music, sinon micro seul.
 - `transcribe.py` : WhisperX (commande) ou Voxtral (API Mistral, `diarize`,
   `context_bias`) → segments → `transcript.py` fixe `LOCAL_SPEAKER` d'après la piste micro.
+- `live.py` : transcription live, processus détaché (`control.start_live`) qui suit
+  `mic.pcm`/`system.pcm`, coupe toutes les ~20 s au point le plus calme → `live.txt`.
+  Moteur whisperx : `whisper_worker.py` tourne sous le Python de l'outil WhisperX
+  (`transcribe.whisperx_python`) et garde faster-whisper chargé ; voxtral : l'API. Sortie (`LOCAL_SPEAKER` / `OTHERS` via `transcript.classify` sur tout
+  l'historique des niveaux) ; progression et heartbeat dans `live.json`. Ouvre et ferme
+  les pistes à chaque lecture (le recorder les supprime au stop), s'arrête au stop.
 - `library.py` : list/show/cat/search/rename, `meta.json`. `push.py` : API mento.
 - `tray.py` : Linux → `tray_appindicator.py` sous le Python système (PyGObject) ;
   Windows/macOS → pystray. Les deux passent par `tray_core.py` et le CLI.
@@ -39,6 +45,9 @@ commande : il amène PyTorch et impose sa version de Python.
 
 ## Pièges
 
+- `whisper_worker.py` : le WAV est lu à la main (le décodeur PyAV de faster-whisper casse
+  sur la version que WhisperX épingle) et `import torch` précède faster-whisper sur cuda
+  (CTranslate2 ne trouve pas seul le cuBLAS des roues nvidia-*).
 - soundcard perd un tiers des trames sans `blocksize` explicite au `recorder()`.
 - soundcard (Pulse) nomme son client d'après `sys.argv[1]` et plante sans ; et il lui
   faut le vrai `XDG_RUNTIME_DIR` (ne pas le surcharger en test).

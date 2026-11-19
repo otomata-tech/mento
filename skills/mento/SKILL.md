@@ -1,6 +1,6 @@
 ---
 name: mento
-description: Enregistrements de réunions d'Alexis (CLI mento) — retrouver, lire, chercher dans les transcripts, lancer une transcription avec le contexte de la mission (vocabulaire, nombre de participants), renommer. À charger dès qu'il est question d'une réunion enregistrée, d'un transcript ou d'un compte rendu de réunion.
+description: Enregistrements de réunions d'Alexis (CLI mento) — retrouver, lire, chercher dans les transcripts, suivre une réunion en direct (transcript live), lancer une transcription avec le contexte de la mission (vocabulaire, nombre de participants), renommer. À charger dès qu'il est question d'une réunion enregistrée, d'un transcript ou d'un compte rendu de réunion.
 ---
 
 # mento
@@ -70,8 +70,27 @@ mento transcribe <rec> --prompt "Olneia, URSSAF, DSN, Marie Dupont" --speakers 3
 ## Enregistrer
 
 ```bash
-mento start | pause | resume | stop [--trim] | status [--json]
+mento start [--live] | pause | resume | stop [--trim] | status [--json]
 ```
+
+## Suivre une réunion en direct
+
+```bash
+mento live --prompt "Olneia, URSSAF, DSN" --language fr   # lance si besoin, affiche live.txt
+mento live                                               # relire ce qui est arrivé depuis
+```
+
+`live.txt` (dans `mento path`) grossit toutes les ~20 s pendant l'enregistrement :
+`[mm:ss] Alexis: …` / `[mm:ss] OTHERS: …` (`UNKNOWN` tant qu'aucun son distant n'est
+passé ou en présentiel). Les interlocuteurs distants ne sont pas distingués en direct.
+Pour recevoir le flux en direct, lance `mento live -f` sous l'outil Monitor (ou
+en arrière-plan) : chaque ligne arrive comme un événement pendant que tu continues, et
+la commande s'arrête seule au stop. Jamais au premier plan : elle bloque jusqu'à la fin
+de la réunion. Pour un coup d'œil ponctuel : `mento live` (sans `-f`). Le moteur est celui
+de `TRANSCRIBE_ENGINE` : whisperx tourne sur le poste (modèle chargé une fois) ; avec
+`--engine voxtral`, l'audio va chez Mistral, même réserve de confidentialité qu'en
+transcription. Ne lance le live qu'à la demande d'Alexis. Après `stop`, la transcription
+diarisée se lance comme d'habitude ; `live.txt` n'en tient pas lieu.
 
 Alexis le pilote d'ordinaire par l'icône du panneau (`mento tray`).
 N'arrête jamais un enregistrement en cours sans qu'il le demande.
